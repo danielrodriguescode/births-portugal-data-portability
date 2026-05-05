@@ -16,8 +16,14 @@ partos_raw  <- readRDS(file.path(proc_dir, "raw_partos.rds"))
 pordata_raw <- readRDS(file.path(proc_dir, "raw_pordata.rds"))
 
 # ---- Partos e Cesarianas -----------------------------------------------------
-# Columns: período (YYYY-MM), região, instituição, localização geográfica ("lat, lng"),
-# nº total de partos, nº cesarianas. Aggregate monthly → annual to align with PORDATA.
+# Columns: período (YYYY-MM), região, instituição, localização geográfica
+# ("lat, lng"), nº total de partos, nº cesarianas.
+#
+# CRITICAL: the monthly values are CUMULATIVE year-to-date, not per-month
+# deliveries. Cascais 2013-01 = 206, 2013-02 = 383 (Jan+Feb), …,
+# 2013-12 = 2,304 (annual total); 2014-01 = 191 (counter resets).
+# Therefore the annual total per hospital is the LATEST month within each
+# year, NOT the sum across months.
 
 partos <- partos_raw |>
   clean_names() |>
@@ -34,10 +40,12 @@ hospitals <- partos |>
 partos_annual <- partos |>
   inner_join(hospitals, by = c("instituicao", "regiao", "lat", "lng")) |>
   group_by(hospital_id, instituicao, regiao, year) |>
-  summarise(
-    partos     = sum(no_total_de_partos, na.rm = TRUE),
-    cesarianas = sum(no_cesarianas,      na.rm = TRUE),
-    .groups = "drop"
+  slice_max(date, n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  transmute(
+    hospital_id, instituicao, regiao, year,
+    partos     = no_total_de_partos,
+    cesarianas = no_cesarianas
   )
 
 # ---- PORDATA -----------------------------------------------------------------
