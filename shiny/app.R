@@ -15,48 +15,53 @@ suppressPackageStartupMessages({
   library(sf)
   library(stringi)
   library(scales)
+  library(forcats)
   library(ulsportugal)
 })
 
-proc_dir <- here::here("data", "processed")
+source(here::here("R", "region_crosswalk.R"))
 
+proc_dir <- here::here("data", "processed")
 nfc <- function(x) stri_trans_nfc(x)
 
-partos_annual <- readRDS(file.path(proc_dir, "partos_annual.rds")) |>
-  mutate(regiao = nfc(regiao))
-hospitals     <- readRDS(file.path(proc_dir, "hospitals.rds")) |>
-  mutate(regiao = nfc(regiao), instituicao = nfc(instituicao))
-flow          <- readRDS(file.path(proc_dir, "flow_index.rds")) |>
-  mutate(regiao = nfc(regiao), instituicao = nfc(instituicao))
-models        <- readRDS(file.path(proc_dir, "models.rds"))
+partos_uls   <- readRDS(file.path(proc_dir, "partos_uls.rds")) |>
+  mutate(unit_id = nfc(unit_id))
+pordata_uls  <- readRDS(file.path(proc_dir, "pordata_uls.rds")) |>
+  mutate(uls = nfc(uls))
+mobility     <- readRDS(file.path(proc_dir, "mobility_panel.rds")) |>
+  mutate(unit_id = nfc(unit_id))
+hospitals    <- readRDS(file.path(proc_dir, "hospitals.rds")) |>
+  mutate(NOME_ULS = nfc(NOME_ULS), instituicao = nfc(instituicao))
+models       <- readRDS(file.path(proc_dir, "models.rds"))
 
-uls_map <- ulsportugal()
+uls_map <- ulsportugal() |>
+  mutate(NOME_ULS   = nfc(NOME_ULS),
+         NOME_CURTO = nfc(NOME_CURTO))
 
-# Spatial join: assign each hospital point to its containing ULS polygon
-hospitals_sf <- hospitals |>
-  filter(!is.na(lat), !is.na(lng)) |>
-  st_as_sf(coords = c("lng", "lat"), crs = 4326, remove = FALSE) |>
-  st_join(uls_map, join = st_within)
+uls_means <- models$uls_means |>
+  left_join(uls_map |> st_drop_geometry() |> as_tibble() |>
+              select(NOME_ULS, NOME_CURTO),
+            by = c("unit_id" = "NOME_ULS"))
 
-# ---- Headline numbers from outputs/tables/headline.csv ----------------------
+ppp_panel <- models$ppp_panel
+
+# ---- Headline numbers ------------------------------------------------------
 headline_path <- here::here("outputs", "tables", "headline.csv")
 headline <- if (file.exists(headline_path)) {
-  readr::read_csv(headline_path, show_col_types = FALSE) |>
-    tibble::deframe()
-} else {
-  c()
-}
+  readr::read_csv(headline_path, show_col_types = FALSE) |> tibble::deframe()
+} else c()
 
 answer_text <- if (length(headline) > 0) {
-  sprintf("Of %s SNS maternity hospitals analysed across %s, the cross-regional flow index clusters strongly in space (Moran's I = %s, p %s). The largest negative flows are concentrated in Lisboa, Porto and the Algarve — where private maternity provision is also concentrated.",
-          headline["n_hospitals"], headline["year_range"],
-          headline["h4_moran_I"], headline["h4_moran_p"])
+  sprintf("Across %s ULS over %s, %s%% are net importers of deliveries (Mobility > 0). The mean ULS-level mobility is %s deliveries/year (95%% CI %s); spatial clustering is significant (Moran's I = %s, p = %s).",
+          headline["n_uls"], headline["year_range"],
+          headline["share_positive_mobility"], headline["h1_estimate"],
+          headline["h1_ci"], headline["h4_moran_I"], headline["h4_moran_p"])
 } else {
-  "Pending analysis — once R/03_analyse.R runs against confirmed data, this card shows the project's headline finding."
+  "Pending analysis."
 }
 
 ui <- page_navbar(
-  title  = "Births in Portugal — Cross-Regional Flow",
+  title  = "Births in Portugal — Hospital vs Resident Mobility",
   theme  = bs_theme(bootswatch = "flatly"),
 
   # ---- Tab 1: ANSWER --------------------------------------------------------
@@ -68,35 +73,44 @@ ui <- page_navbar(
         card_header("In one sentence"),
         card_body(
           h4(answer_text),
-          p(em("Source: PORDATA + Transparência SNS, 2013–2024 (cross-referenced) / 2013–2025 (SNS-only). See the 'Methods (plain language)' tab for how this is calculated."))
+          p(em("Source: PORDATA (resident births by concelho) + Transparência SNS (hospital deliveries) + ulsportugal (concelho→ULS map). Period: 2014–2024."))
         )
       ),
       card(
-        card_header("Why this matters"),
+        card_header("Methodological pivot"),
         card_body(
-          p("If a meaningful share of births in Portugal happen at hospitals outside the mother's home region, then her prenatal records — held by her local provider — do not automatically follow her. The receiving team starts blind."),
-          p(strong("This is a clinical safety argument for portable, interoperable maternal health records across the SNS."))
+          p("This project initially used a capacity-weighted ", em("expected"), " formula to attribute regional births to hospitals. We replaced it with a ", strong("direct two-source comparison"), ":"),
+          tags$pre("Mobility(ULS, year) = HospitalDeliveries(ULS, year) − ResidentBirths(ULS, year)"),
+          p("Where ", strong("HospitalDeliveries"), " comes from Transparência SNS (where the baby was born) and ", strong("ResidentBirths"), " comes from PORDATA aggregated to ULS via the concelho→ULS map in the ", code("ulsportugal"), " package (where the mother lives). No capacity proxy, no redistribution. The difference IS the mobility.")
         )
       ),
       card(
-        card_header("Statistical evidence (the four hypotheses)"),
+        card_header("Statistical evidence"),
         card_body(
           tags$table(class = "table table-sm",
             tags$thead(tags$tr(
               tags$th("Hypothesis"), tags$th("Test"), tags$th("Result"))),
             tags$tbody(
-              tags$tr(tags$td("H1: flow index ≠ 0"),
-                      tags$td("One-sample t (caveat: IID violated)"),
-                      tags$td(sprintf("t = %s, p %s", headline["h1_t"], headline["h1_p"]))),
-              tags$tr(tags$td("H2: urban tertiary centres absorb more"),
-                      tags$td("Wilcoxon (5 vs 34 hospitals)"),
-                      tags$td(sprintf("W = %s, p = %s — opposite direction to plan", headline["h2_wilcox_W"], headline["h2_p"]))),
+              tags$tr(tags$td("H1: Mobility ≠ 0 across the 39 ULS"),
+                      tags$td("One-sample t-test on per-ULS means"),
+                      tags$td(sprintf("t = %s, p = %s; mean = %s",
+                                      headline["h1_t"], headline["h1_p"],
+                                      headline["h1_estimate"]))),
+              tags$tr(tags$td("H2: urban tertiary ULS absorb more"),
+                      tags$td("Wilcoxon (6 vs 33 ULS)"),
+                      tags$td(sprintf("W = %s, p = %s",
+                                      headline["h2_W"], headline["h2_p"]))),
               tags$tr(tags$td("H3: temporal drift"),
                       tags$td("lmer year coefficient"),
-                      tags$td(sprintf("β = %s/year, 95%% CI %s", headline["h3_year_coef"], headline["h3_year_ci"]))),
+                      tags$td(sprintf("β = %s/year, 95%% CI %s, p = %s",
+                                      headline["h3_year_coef"],
+                                      headline["h3_year_ci"],
+                                      headline["h3_year_p"]))),
               tags$tr(tags$td("H4: spatial clustering"),
-                      tags$td("Moran's I, k=5 NN"),
-                      tags$td(sprintf("I = %s, p %s", headline["h4_moran_I"], headline["h4_moran_p"])))
+                      tags$td("Moran's I on ULS centroids, k=5 NN"),
+                      tags$td(sprintf("I = %s, p = %s",
+                                      headline["h4_moran_I"],
+                                      headline["h4_moran_p"])))
             )
           )
         )
@@ -104,86 +118,93 @@ ui <- page_navbar(
     )
   ),
 
-  # ---- Tab 2: REGIONAL OVERVIEW (choropleth) --------------------------------
+  # ---- Tab 2: MAP -----------------------------------------------------------
   nav_panel(
-    "Regional Overview",
+    "Map",
     layout_sidebar(
       sidebar = sidebar(
-        sliderInput("year_overview", "Year",
-                    min = min(partos_annual$year), max = max(partos_annual$year),
-                    value = max(partos_annual$year), step = 1, sep = ""),
-        radioButtons("metric_overview", "Metric",
-                     choices = c("Annual deliveries"   = "deliveries",
-                                 "Caesarean rate (%)"  = "csection",
-                                 "Mean flow index"     = "flow"),
-                     selected = "deliveries"),
-        tags$small(em("ULS polygons from the ulsportugal R package; hospital points sized by deliveries that year."))
+        sliderInput("year_map", "Year",
+                    min = min(mobility$year), max = max(mobility$year),
+                    value = max(mobility$year), step = 1, sep = ""),
+        radioButtons("metric_map", "Metric",
+                     choices = c("Mean mobility (2014–2024)" = "mean_mobility",
+                                 "Mobility (selected year)"  = "mobility_year",
+                                 "Hospital deliveries"        = "deliveries",
+                                 "Resident births"            = "resident_births"),
+                     selected = "mean_mobility"),
+        tags$small(em("Choropleth uses the 39 ULS sf polygons from the ulsportugal package."))
       ),
-      leafletOutput("map_overview", height = 700)
+      leafletOutput("map_choropleth", height = 700)
     )
   ),
 
-  # ---- Tab 3: HOSPITAL EXPLORER ---------------------------------------------
+  # ---- Tab 3: ULS EXPLORER --------------------------------------------------
   nav_panel(
-    "Hospital Explorer",
+    "ULS Explorer",
     layout_sidebar(
       sidebar = sidebar(
-        selectInput("regiao_filter", "Região de Saúde",
-                    choices = c("All", sort(unique(partos_annual$regiao)))),
         sliderInput("year_explorer", "Year",
-                    min = min(flow$year), max = max(flow$year),
-                    value = max(flow$year), step = 1, sep = ""),
-        tags$small(em("Points above the dashed line are net inflow (absorbing more than capacity-weighted regional share predicts)."))
+                    min = min(mobility$year), max = max(mobility$year),
+                    value = max(mobility$year), step = 1, sep = "")
       ),
       plotlyOutput("plot_obs_vs_exp", height = 450),
-      DTOutput("table_hospitals")
+      DTOutput("table_uls")
     )
   ),
 
-  # ---- Tab 4: CROSS-REGIONAL FLOW (heatmap) ---------------------------------
+  # ---- Tab 4: HEATMAP -------------------------------------------------------
   nav_panel(
-    "Cross-Regional Flow",
+    "Heatmap",
     layout_sidebar(
       sidebar = sidebar(
-        helpText("Heat map of mean flow index per hospital × year. Blue = net inflow, red = net outflow. Hospitals are ordered by their overall mean flow."),
-        radioButtons("flow_scope", "Scope",
-                     choices = c("All hospitals"             = "all",
-                                 "Top 10 inflow + outflow"   = "top"),
-                     selected = "top")
+        helpText("Mobility per ULS × year. Blue = net inflow, red = net outflow. ULS ordered by overall mean mobility.")
       ),
-      plotlyOutput("plot_flow_heatmap", height = 700)
+      plotlyOutput("plot_heatmap", height = 700)
     )
   ),
 
-  # ---- Tab 5: METHODS IN PLAIN LANGUAGE -------------------------------------
+  # ---- Tab 5: PPP TABLE -----------------------------------------------------
+  nav_panel(
+    "PPP hospitals",
+    card(
+      card_header("Public-private partnership hospitals"),
+      card_body(
+        p("PPPs (Cascais, Loures, Braga, Vila Franca de Xira) are SNS-funded but operated by private contractors. They are reported here separately because they have hospital-level deliveries but no defined catchment area — assigning them to a ULS would distort that ULS's mobility figure."),
+        p(strong("Excluded from H1–H4."), " See paper Discussion §Limitations."),
+        DTOutput("table_ppp")
+      )
+    )
+  ),
+
+  # ---- Tab 6: METHODS -------------------------------------------------------
   nav_panel(
     "Methods (plain language)",
     card(
       card_header("How we got the answer"),
       card_body(
-        p(strong("The question."), " Are Portuguese maternity hospitals delivering babies for mothers from outside their region?"),
-        p(strong("Two datasets."), " ",
+        p(strong("The question."), " For each of Portugal's 39 mainland ULS, do mothers living in that ULS deliver in that ULS's hospitals?"),
+        p(strong("Two datasets."),
           tags$ol(
-            tags$li(strong("PORDATA"), " — annual live births by region of mother's residence (NUTS 2024)."),
-            tags$li(strong("Transparência SNS"), " — monthly cumulative deliveries per public hospital, with hospital region.")
+            tags$li(strong("PORDATA"), " — annual live births by ", em("concelho de residência da mãe"), " (where the mother lives). Aggregated to ULS via the ", code("ulsportugal"), " concelho→ULS map. For the 3 split concelhos (Lisboa, Loures, Porto) we allocate proportionally to the number of freguesias in each ULS."),
+            tags$li(strong("Transparência SNS"), " — monthly cumulative-YTD deliveries per public hospital. The annual total per hospital is the December value; hospitals are mapped to ULS by direct name match (for the 39 hospitals named exactly after a ULS) and by spatial point-in-polygon for the rest.")
           )),
-        p(strong("The reasoning."), " If every mother delivered in her own region, each hospital's share of regional births should match its share of regional capacity. We calculate this expected share and compare it to what hospitals actually delivered. The difference — the ", strong("cross-regional flow index"), " — tells us where the system is moving patients across boundaries."),
-        p(strong("The maths, in one line.")),
-        tags$pre("Expected(hospital, region, year) = TotalBirthsInRegion(year)\n                                  × HospitalCapacity / RegionalCapacity"),
-        p("Hospitals where ", em("observed > expected"), " are absorbing patients from outside; hospitals where ", em("observed < expected"), " are losing residents to other regions or to private hospitals not in this dataset."),
-        p(strong("The four tests."),
+        p(strong("The metric."),
+          tags$pre("Mobility(ULS, year) = HospitalDeliveries(ULS, year) − ResidentBirths(ULS, year)")),
+        p("ULS where ", em("Mobility > 0"), " absorb deliveries from outside their catchment; ULS where ", em("Mobility < 0"), " export — their residents deliver elsewhere (other ULS, private hospitals, at home, abroad)."),
+        p(strong("Why not capacity-weighted expected?"), " A previous draft used ", code("Expected = TotalBirths × Capacity / Σ Capacity"), ", which is circular — capacity is itself proxied by historical deliveries, so a hospital that has been a magnet for 50 years gets a high capacity, which makes its expected = observed and its mobility ≈ 0 by construction. The direct comparison above avoids this."),
+        p(strong("The four hypotheses."),
           tags$ul(
-            tags$li(strong("H1"), " — t-test: is the flow index different from zero on average?"),
-            tags$li(strong("H2"), " — Wilcoxon: do urban tertiary centres in Lisboa/Porto/Coimbra absorb more than peripheral hospitals?"),
-            tags$li(strong("H3"), " — mixed-effects model: is the flow index drifting over time?"),
-            tags$li(strong("H4"), " — Moran's I: do hospitals with similar flow indices cluster geographically?")
+            tags$li(strong("H1"), " — t-test: is mean ULS mobility different from zero?"),
+            tags$li(strong("H2"), " — Wilcoxon: do urban tertiary ULS (Santa Maria, São José, Lisboa Ocidental, São João, Santo António, Coimbra) absorb more than peripheral ULS?"),
+            tags$li(strong("H3"), " — mixed-effects model: is mobility drifting over time?"),
+            tags$li(strong("H4"), " — Moran's I: does mobility cluster geographically across ULS centroids?")
           )),
-        p(strong("Caveat."), " SNS captures roughly 80–87 % of Portugal's continental live births; the remaining 13–20 % go to private hospitals (concentrated in Lisboa, Porto, Algarve), at home, or abroad. Absolute flow values are biased downward by this gap, but the spatial-clustering finding (H4) is robust to it.")
+        p(strong("Caveat."), " SNS captures roughly 80–87 % of Portugal's continental live births; the remaining 13–20 % go to private hospitals (concentrated in Lisboa, Porto, Algarve), at home, or abroad. National mean mobility is therefore biased downward by ~15 %. Spatial clustering and per-ULS rankings remain interpretable.")
       )
     )
   ),
 
-  # ---- Tab 6: DATA & SOURCES ------------------------------------------------
+  # ---- Tab 7: DATA ----------------------------------------------------------
   nav_panel(
     "Data",
     p("Source attribution and full reproducibility."),
@@ -191,12 +212,13 @@ ui <- page_navbar(
       tags$li(tags$a("Transparência SNS — Partos e Cesarianas",
                      href = "https://transparencia.sns.gov.pt/explore/dataset/partos-e-cesarianas/",
                      target = "_blank")),
-      tags$li(tags$a("PORDATA — Nados-vivos por região",
+      tags$li(tags$a("PORDATA — Nados-vivos por município",
                      href = "https://www.pordata.pt", target = "_blank")),
-      tags$li(tags$a("ulsportugal R package (ULS sf geometries)",
+      tags$li(tags$a("ulsportugal R package",
                      href = "https://github.com/danielrodriguescode/ulsportugal",
-                     target = "_blank")),
-      tags$li(tags$a("Project repository (code, paper, prompts.md)",
+                     target = "_blank"),
+              " — sf geometries for the 39 ULS + concelho/freguesia → ULS dictionary"),
+      tags$li(tags$a("Project repository",
                      href = "https://github.com/danielrodriguescode/births-portugal-data-portability",
                      target = "_blank"))
     )
@@ -205,133 +227,133 @@ ui <- page_navbar(
 
 server <- function(input, output, session) {
 
-  # ---- Regional Overview map (choropleth + hospital points) -----------------
-  region_yearly <- reactive({
-    req(input$year_overview)
-    df <- partos_annual |>
-      filter(year == input$year_overview) |>
-      group_by(hospital_id, instituicao, regiao) |>
-      summarise(deliveries = sum(partos, na.rm = TRUE),
-                cesarianas = sum(cesarianas, na.rm = TRUE),
-                .groups = "drop") |>
-      mutate(csection = ifelse(deliveries > 0, cesarianas / deliveries, NA))
-
-    # bring flow index for the selected year (only available 2013-2024)
-    flow_year <- flow |>
-      filter(year == input$year_overview) |>
-      select(hospital_id, flow_index)
-    df |> left_join(flow_year, by = "hospital_id")
-  })
-
-  hospital_points <- reactive({
-    df <- region_yearly()
-    hospitals |>
-      filter(!is.na(lat), !is.na(lng)) |>
-      inner_join(df, by = c("hospital_id", "instituicao", "regiao"))
-  })
-
-  output$map_overview <- renderLeaflet({
-    pts <- hospital_points()
-    metric_col <- switch(input$metric_overview,
-                         deliveries = pts$deliveries,
-                         csection   = pts$csection * 100,
-                         flow       = pts$flow_index)
-    pal <- if (input$metric_overview == "flow") {
-      colorNumeric(c("#b2182b", "#f7f7f7", "#2166ac"),
-                   domain = c(-max(abs(metric_col), na.rm = TRUE),
-                               max(abs(metric_col), na.rm = TRUE)))
+  # ---- Map ------------------------------------------------------------------
+  map_data <- reactive({
+    base <- uls_map |>
+      left_join(uls_means |> select(unit_id, mean_mobility),
+                by = c("NOME_ULS" = "unit_id"))
+    if (input$metric_map == "mean_mobility") {
+      base$value <- base$mean_mobility
     } else {
-      colorNumeric("YlOrRd", domain = metric_col, na.color = "#cccccc")
+      yr_data <- mobility |>
+        filter(year == input$year_map) |>
+        select(unit_id, mobility, deliveries, resident_births)
+      base <- base |>
+        left_join(yr_data, by = c("NOME_ULS" = "unit_id"))
+      base$value <- switch(input$metric_map,
+                            mobility_year   = base$mobility,
+                            deliveries      = base$deliveries,
+                            resident_births = base$resident_births)
     }
-    label_fmt <- switch(input$metric_overview,
-                        deliveries = sprintf("%s — %s deliveries", pts$instituicao, comma(pts$deliveries)),
-                        csection   = sprintf("%s — %.1f%% caesarean", pts$instituicao, pts$csection * 100),
-                        flow       = sprintf("%s — flow index %s", pts$instituicao, ifelse(is.na(pts$flow_index), "n/a", round(pts$flow_index, 0))))
+    base
+  })
 
-    leaflet() |>
+  output$map_choropleth <- renderLeaflet({
+    df <- map_data()
+    if (input$metric_map %in% c("mean_mobility", "mobility_year")) {
+      pal <- colorNumeric(c("#b2182b", "#f7f7f7", "#2166ac"),
+                          domain = c(-max(abs(df$value), na.rm = TRUE),
+                                      max(abs(df$value), na.rm = TRUE)))
+    } else {
+      pal <- colorNumeric("YlOrRd", domain = df$value, na.color = "#cccccc")
+    }
+    label <- sprintf("%s: %s", df$NOME_CURTO,
+                     ifelse(is.na(df$value), "n/a",
+                             scales::comma(round(df$value))))
+    leaflet(df) |>
       addProviderTiles(providers$CartoDB.Positron) |>
-      addPolygons(data = uls_map, fillColor = "#dfeaf2",
+      addPolygons(fillColor = ~pal(value),
                   weight = 0.5, color = "white",
-                  fillOpacity = 0.6,
-                  label = ~NOME_CURTO,
+                  fillOpacity = 0.85,
+                  label = label,
                   highlightOptions = highlightOptions(weight = 2, color = "#666",
                                                      bringToFront = TRUE)) |>
-      addCircleMarkers(
-        data = pts, lng = ~lng, lat = ~lat,
-        radius = 5 + 8 * (pts$deliveries / max(pts$deliveries, na.rm = TRUE)),
-        color = pal(metric_col), stroke = TRUE, weight = 1,
-        fillOpacity = 0.85,
-        label = label_fmt) |>
-      addLegend("bottomright", pal = pal, values = metric_col,
-                title = switch(input$metric_overview,
-                               deliveries = "Deliveries",
-                               csection   = "Caesarean rate",
-                               flow       = "Flow index"),
-                opacity = 0.8)
+      addLegend("bottomright", pal = pal, values = ~value,
+                title = switch(input$metric_map,
+                                mean_mobility   = "Mean mobility",
+                                mobility_year   = sprintf("Mobility %s", input$year_map),
+                                deliveries      = "Deliveries",
+                                resident_births = "Resident births"),
+                opacity = 0.85, na.label = "n/a")
   })
 
-  # ---- Hospital Explorer (observed vs expected) -----------------------------
+  # ---- ULS Explorer (deliveries vs residents) -------------------------------
   filtered_explorer <- reactive({
-    df <- flow |> filter(year == input$year_explorer)
-    if (input$regiao_filter != "All") df <- df |> filter(regiao == input$regiao_filter)
-    df
+    mobility |> filter(year == input$year_explorer)
   })
 
   output$plot_obs_vs_exp <- renderPlotly({
-    df <- filtered_explorer()
+    df <- filtered_explorer() |>
+      left_join(uls_map |> st_drop_geometry() |> as_tibble() |>
+                  select(NOME_ULS, NOME_CURTO),
+                by = c("unit_id" = "NOME_ULS"))
     if (nrow(df) == 0) return(NULL)
-    p <- ggplot(df, aes(expected, partos, colour = regiao,
-                        text = paste0(instituicao,
-                                      "<br>Observed: ", comma(partos),
-                                      "<br>Expected: ", comma(round(expected)),
-                                      "<br>Flow: ",   comma(round(flow_index))))) +
+    p <- ggplot(df, aes(resident_births, deliveries,
+                        colour = unit_id %in% URBAN_TERTIARY_ULS,
+                        text = sprintf("%s<br>Deliveries: %s<br>Residents: %s<br>Mobility: %s",
+                                       NOME_CURTO,
+                                       comma(round(deliveries)),
+                                       comma(round(resident_births)),
+                                       comma(round(mobility))))) +
       geom_abline(slope = 1, intercept = 0, colour = "grey60", linetype = "dashed") +
-      geom_point(size = 3, alpha = 0.8) +
+      geom_point(size = 3, alpha = 0.85) +
+      scale_colour_manual(values = c("FALSE" = "#1f78b4", "TRUE" = "#b2182b"),
+                          labels = c("Peripheral", "Urban tertiary"),
+                          name = NULL) +
       scale_x_continuous(labels = comma) +
       scale_y_continuous(labels = comma) +
-      labs(x = "Expected deliveries", y = "Observed deliveries", colour = NULL,
-           title = paste("Observed vs expected,", input$year_explorer)) +
+      labs(x = "Resident births (PORDATA)", y = "Hospital deliveries (SNS)",
+           title = paste("Hospital deliveries vs resident births,", input$year_explorer)) +
       theme_minimal()
     ggplotly(p, tooltip = "text")
   })
 
-  output$table_hospitals <- renderDT({
-    df <- filtered_explorer() |>
-      select(instituicao, regiao, partos, expected, flow_index) |>
-      mutate(across(c(expected, flow_index), \(x) round(x, 1)))
-    datatable(df, rownames = FALSE, options = list(pageLength = 10))
+  output$table_uls <- renderDT({
+    filtered_explorer() |>
+      left_join(uls_map |> st_drop_geometry() |> as_tibble() |>
+                  select(NOME_ULS, NOME_CURTO),
+                by = c("unit_id" = "NOME_ULS")) |>
+      transmute(ULS = NOME_CURTO,
+                Deliveries = round(deliveries),
+                `Resident births` = round(resident_births),
+                Mobility = round(mobility),
+                `Mobility ratio` = round(mobility_ratio, 2)) |>
+      datatable(rownames = FALSE, options = list(pageLength = 12)) |>
+      formatStyle("Mobility",
+                  background = styleColorBar(c(-3500, 3500),
+                                              c("#fdb863", "#b2abd2")))
   })
 
-  # ---- Cross-Regional Flow heatmap ------------------------------------------
-  flow_for_heatmap <- reactive({
-    base <- flow |>
-      group_by(hospital_id, instituicao, regiao) |>
-      mutate(overall_mean = mean(flow_index, na.rm = TRUE)) |>
-      ungroup()
-    if (input$flow_scope == "top") {
-      ordering <- base |>
-        distinct(hospital_id, overall_mean) |>
-        arrange(overall_mean)
-      keep <- c(head(ordering$hospital_id, 10), tail(ordering$hospital_id, 10))
-      base <- base |> filter(hospital_id %in% keep)
-    }
-    base |>
-      mutate(instituicao = forcats::fct_reorder(instituicao, overall_mean))
-  })
-
-  output$plot_flow_heatmap <- renderPlotly({
-    df <- flow_for_heatmap()
-    p <- ggplot(df, aes(year, instituicao, fill = flow_index,
-                        text = paste0(instituicao, " — ", year,
-                                      "<br>Flow: ", comma(round(flow_index))))) +
+  # ---- Heatmap --------------------------------------------------------------
+  output$plot_heatmap <- renderPlotly({
+    df <- mobility |>
+      left_join(uls_map |> st_drop_geometry() |> as_tibble() |>
+                  select(NOME_ULS, NOME_CURTO),
+                by = c("unit_id" = "NOME_ULS")) |>
+      group_by(unit_id, NOME_CURTO) |>
+      mutate(overall = mean(mobility)) |>
+      ungroup() |>
+      mutate(NOME_CURTO = fct_reorder(NOME_CURTO, overall))
+    p <- ggplot(df, aes(year, NOME_CURTO, fill = mobility,
+                        text = sprintf("%s — %s<br>Mobility: %s",
+                                       NOME_CURTO, year, comma(round(mobility))))) +
       geom_tile(colour = "white") +
       scale_fill_gradient2(low = "#b2182b", mid = "#f7f7f7", high = "#2166ac",
-                           midpoint = 0, labels = comma) +
-      labs(x = NULL, y = NULL, fill = "Flow",
-           title = "Cross-regional flow index per hospital × year") +
+                            midpoint = 0, labels = comma) +
+      labs(x = NULL, y = NULL, fill = "Mobility") +
       theme_minimal() +
       theme(axis.text.y = element_text(size = 8))
     ggplotly(p, tooltip = "text")
+  })
+
+  # ---- PPP table ------------------------------------------------------------
+  output$table_ppp <- renderDT({
+    ppp_panel |>
+      mutate(across(c(deliveries, cesarianas), round)) |>
+      transmute(Hospital = unit_id, Year = year,
+                Deliveries = deliveries, Caesareans = cesarianas) |>
+      arrange(Hospital, Year) |>
+      datatable(rownames = FALSE, options = list(pageLength = 15))
   })
 }
 

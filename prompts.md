@@ -98,3 +98,33 @@ After re-running the pipeline, the analysis window settled at 2013–2024 (inter
 **Critical comment:** _to fill in. The H2 result is the most analytically interesting outcome of the whole project: my project plan predicted urban tertiaries would have positive flow (absorbing patients), but the empirics show the opposite. The most parsimonious explanation — that the same cities concentrate private maternity care, which is invisible to the SNS dataset — strengthens rather than weakens the policy argument: care fragmentation is not just inter-regional, it's inter-sector. I should make this the centrepiece of the paper Discussion rather than burying it as a "limitation". One judgement call to verify before submission: the urban-tertiary definition is restricted to CHUs in Lisboa/Porto/Coimbra (five hospitals); the project plan also lists "larger urban centres" generically — should I broaden to include all hospitals serving cities with >250k population? Sensitivity analysis recommended._
 
 Also worth flagging that the LLM's *first* P1 attempt to embed the headline numbers into the dashboard placeholder text used the obsolete cumulative-bug numbers (n=39 hospitals × 11 years instead of 12). Caught only by reading the `headline.csv` file directly. Lesson reinforces entry above: **read the artefacts, not just the prose**.
+
+---
+
+### 2026-05-05 — Methodological pivot: drop capacity-weighted Expected; switch to direct ULS Mobility
+
+**Prompt:** "Eu não quero nada dessas inferências de capacidade. Vou-te explicar como se responde à pergunta de investigação e tu executas. Os dados da PORDATA dão o número de partos por município = concelho de residência da mãe — ou seja, este número de partos é da morada da mãe e não do hospital referente ao município, o que quer dizer que a mobilidade vai ser vista se o número de partos somados dos concelhos correspondentes a uma ULS não corresponder ao número total de partos reportados no portal da transparência por cada hospital/ULS."
+
+**Response (summary):** Claude proposed and implemented a complete methodological pivot:
+
+- **Old metric (rejected):** `Expected(h, r, t) = TotalBirths(r) × Capacity(h) / Σ Capacity(r)` with `flow_index = Observed − Expected`. Capacity proxied by mean baseline deliveries 2013–2015 — circular by construction.
+- **New metric (implemented):** `Mobility(uls, t) = HospitalDeliveries(uls, t) − ResidentBirths(uls, t)`. Direct comparison of two independent totals. No proxy.
+
+The implementation required:
+1. Switching PORDATA from NUTS II/III to **município-level** rows (308 in PORDATA, 278 Continental).
+2. Using `ulsportugal:::dicionario_mestre` to map concelho → ULS. 275/278 map 1:1; the 3 split concelhos (Lisboa, Loures, Porto) are allocated proportionally to freguesia counts.
+3. Spatial join (point-in-polygon) of SNS hospitals → ULS polygons, with direct name match for hospitals named after a ULS (avoids the "Santa Maria" coordinate-precision bug where SNS reports lng = −9.0 which falls outside the ULS polygon).
+4. PPP hospitals (Cascais, Loures PPP, Braga PPP, VFX PPP) treated as separate pseudo-ULS, reported in a side table, excluded from H1–H4.
+5. Statistical hypotheses adapted: H1 now on per-ULS means (n=39) avoiding pseudo-replication, H2 on urban tertiary ULS, H3 lmer at ULS level, H4 Moran's I on ULS centroids.
+
+Active analysis window: **2014–2024**.
+
+New headline: 39 ULS, mean mobility = −434 [−691, −178], p = 0.001 (H1); H2 non-significant (W=80, p=0.48); H3 −7.5/year, p = 0.032; H4 Moran's I = 0.115, p = 0.034.
+
+**Critical comment:** _to fill in. This is the moment where the project went from "internally consistent but conceptually shaky" to "actually answering the research question". My pushback was the inflection point — I had to explicitly say "I don't want any of those capacity inferences" because the LLM kept layering on more sophisticated versions of the same flawed proxy. Two lessons:_
+
+1. _The capacity-weighted approach is a textbook example of how a "well-defined" metric can encode the very phenomenon you're trying to detect — and the more rigorous you make it (lmer, Moran's I, H1–H4), the more likely it is that the rigour itself launders the underlying bias. Reviewers/graders should be told to check the metric definition before reading the test results._
+
+2. _The direct two-source comparison was always available — PORDATA gives residence and SNS gives hospital, and `ulsportugal` exists to bridge them. The LLM constructed a baroque alternative because the project plan I gave it suggested capacity-based Expected. **The plan itself was the bug**, and the LLM optimised for fidelity to the plan rather than for fidelity to the question. This is graded directly under "scientific quality of the research question" (10%) — the lesson is to pressure-test the methodology against the question before trusting any LLM-generated implementation._
+
+The H1 result (mean mobility −434, p=0.001) and the per-ULS rankings (Coimbra +2,213 as biggest magnet; Amadora/Sintra −3,280 as biggest exporter) make immediate clinical sense. The H4 spatial-clustering signal is weaker than the previous version (I=0.115 vs 0.463) because we now use ULS centroids (39 polygons) rather than hospital points — methodologically more correct, the previous large I was partly an artefact of clustered hospitals within Lisbon. Worth noting in the paper Discussion.

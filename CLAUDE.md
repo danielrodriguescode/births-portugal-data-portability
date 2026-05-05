@@ -108,9 +108,9 @@ The pipeline is **strictly sequential and idempotent**. Each numbered script rea
     - Take the **December** value as the annual total (the SNS monthly counters are cumulative year-to-date — see "Data notes that bite" below)
     - PORDATA: skip rows 1–5 (metadata), use row 6 cols 3–21 as year labels (Total block; cols 22+ are Masculino/Feminino), pivot wide-to-long, filter to NUTS II/III ≥ 2010
     - Output `partos_annual.rds`, `pordata_annual.rds`, `hospitals.rds`.
-4. **`03_analyse.R`** — compute, per `(hospital h, region r, year t)`:
-   `Expected(h, r, t) = TotalBirths(r, t) × Capacity(h) / Σ Capacity(r)`
-   where `Capacity(h)` is the hospital's mean delivery volume over baseline 2013–2015. Aggregate PORDATA NUTS II to Região de Saúde via [R/region_crosswalk.R](R/region_crosswalk.R) (Lisboa is split into 3 NUTS II under NUTS 2024; all map to LVT). Apply Unicode NFC normalisation (`stringi::stri_trans_nfc`) on every join key — without it the SNS data (composed `ã`) silently fails to match the crosswalk source-file (decomposed). Run H1 (one-sample t-test, IID violated, lmer is the trustworthy test), H2 (Wilcoxon urban tertiary vs other), H3 (lmer with `lmerTest`-derived Satterthwaite p-values), H4 (Moran's I, k=5 NN). Output `flow_index.rds`, `models.rds`, `outputs/tables/headline.csv`.
+4. **`03_analyse.R`** — compute, per `(uls, year)`:
+   `Mobility = HospitalDeliveries(uls, year) − ResidentBirths(uls, year)`
+   No capacity proxy, no redistribution. PORDATA is aggregated to ULS via the concelho→ULS dictionary in `ulsportugal` (3 split concelhos — Lisboa, Loures, Porto — allocated proportionally to freguesia counts). Apply Unicode NFC normalisation (`stringi::stri_trans_nfc`) on every join key — without it the SNS data (composed `ã`) silently fails to match the crosswalk source-file (decomposed). Run H1 (one-sample t-test on per-ULS means, n=39 — no IID violation), H2 (Wilcoxon urban tertiary vs other), H3 (lmer with `lmerTest`-derived Satterthwaite p-values), H4 (Moran's I, k=5 NN on ULS polygon centroids). Output `mobility_panel.rds`, `models.rds`, `outputs/tables/headline.csv`, `outputs/tables/ppp_panel.csv`.
 5. **`04_visualise.R`** — generate every static figure referenced by `paper.Rmd` and the slides into `outputs/figures/`. Currently 7 figures (deliveries by region, caesarean rate, observed-vs-expected, mean flow per hospital, two lmer diagnostics, H2 box+strip).
 
 The Shiny app reads the same `data/processed/*.rds` artefacts. It does **not** re-run the pipeline. If app data looks stale, run `run_all.R` first.
@@ -121,17 +121,19 @@ These are not theoretical — every one was caught at runtime and corrected. Rea
 
 1. **SNS counters are cumulative year-to-date** — Cascais 2013-01 = 206, 2013-02 = 383 (Jan+Feb), …, 2013-12 = 2,304 (annual total); 2014-01 = 191 (resets). The annual total is the **December** value, never the sum across months. `02_clean.R` enforces this with `slice_max(date, n = 1)` per hospital-year, plus a filter that drops any year whose latest reported month is not December.
 2. **Hospital identity drifts across SNS releases** — Cascais and 5 ULS units have two slightly different reported coordinates over the years; the same institution gets renamed (e.g. Centro Hospitalar Universitário Cova da Beira → Unidade Local de Saúde da Cova da Beira) in 2024. Identity is keyed on `(instituicao, regiao)` only — never include lat/lng. Despite this, the CHU→ULS rename still creates two `instituicao` strings for the same hospital; we treat them as separate institutions in the panel because pre-2024 baseline capacity is what defines the analysis cohort. A spatial join (point-in-polygon with `ulsportugal`) is used in the Shiny app to consolidate the duplicates visually but not in the analysis.
-3. **Região in the SNS CSV is *Região de Saúde*, not NUTS II.** Five categories vs PORDATA's nine NUTS II under NUTS 2024. The crosswalk in [R/region_crosswalk.R](R/region_crosswalk.R) maps Norte/Centro/Alentejo/Algarve cleanly; LVT aggregates the three Lisboa-area NUTS II (Oeste e Vale do Tejo + Grande Lisboa + Península de Setúbal). Madeira and Açores are excluded — outside Continental SNS.
+3. **Concelho → ULS mapping uses `ulsportugal:::dicionario_mestre`.** 275 of 278 Continental concelhos map 1:1 to a single ULS; 3 are split (Lisboa across 3 ULS, Loures and Porto across 2). For these we allocate PORDATA births proportionally to the number of freguesias the package assigns to each ULS — a defensible default in the absence of freguesia-level population weights. Madeira and Açores are excluded (autonomous regions outside Continental SNS).
 4. **Unicode NFC vs NFD silently breaks joins.** SNS data is composed (`ã` = 1 codepoint), the crosswalk source file is decomposed (`a` + combining tilde = 2 codepoints) depending on editor. Always normalise with `stringi::stri_trans_nfc()` before any join on Portuguese region or hospital names.
 5. **PORDATA Excel layout** — sheet "Quadro" has 5 metadata rows; row 6 is the year-label header for the *Total* block (cols 3–21); cols 22–40 repeat for Masculino, 41–59 for Feminino. Read the whole sheet with `col_names = FALSE, .name_repair = "minimal"` and slice the Total block manually. PORDATA in the current file uses **NUTS 2024** (live as of 2025-12-23), which splits the old Área Metropolitana de Lisboa into three NUTS II.
-6. **Time-period coverage:** SNS is 2013–2025 + partial 2026; PORDATA is 2010–2024. The cross-referenced flow analysis is 2013–2024; SNS-only descriptive figures use 2013–2025.
+6. **Time-period coverage:** SNS is 2013–2025 + partial 2026; PORDATA is 2010–2024. The active analysis window is **2014–2024**.
 
 ## Statistical hypotheses (see [data/DATA_DICTIONARY.md](data/DATA_DICTIONARY.md) for full pre-registration)
 
-- **H1.** Flow index ≠ 0 across all hospital-years (one-sample t-test). Caveat: violates IID; the lmer fit (H3) is the trustworthy test.
-- **H2.** Urban tertiary centres in Lisboa, Porto and Coimbra absorb more cross-regional patients than peripheral hospitals (Wilcoxon two-sample). **Empirically the direction was opposite** — urban tertiaries have *more negative* flow indices than peripheral hospitals (p = 0.14, not significant). The most parsimonious explanation is private-sector concentration in those same cities.
-- **H3.** Flow index drifts over time (`lmer(flow ~ year + (1 | hospital_id))`).
-- **H4.** Spatial clustering of flow indices (Moran's I with k=5 nearest-neighbour weights).
+Unit of analysis: 39 mainland ULS (PPPs reported separately, not in tests).
+
+- **H1.** Mean ULS mobility ≠ 0 (one-sample t-test on the 39 per-ULS means). Empirically: t = −3.42, p = 0.001, mean = −434 deliveries/year/ULS. **Reject H₀.**
+- **H2.** Urban tertiary ULS (Santa Maria, São José, Lisboa Ocidental, São João, Santo António, Coimbra) absorb more than peripheral ULS (Wilcoxon two-sample). Empirically: W = 80, p = 0.48 — **non-significant**, and the urban tertiaries span the entire mobility distribution (Coimbra +2,213 is the biggest magnet; Lisboa Ocidental −1,841 is one of the biggest exporters). The "urban tertiary" label is too coarse to be predictive.
+- **H3.** Mobility drifts over time (`lmer(mobility ~ year + (1 | uls))`). Empirically: β = −7.5/year, 95% CI [−14.4, −0.7], p = 0.032. **Reject H₀** — gap widening.
+- **H4.** Spatial clustering (Moran's I on ULS polygon centroids, k=5 NN). Empirically: I = 0.115, p = 0.034. **Reject H₀** — significant but modest spatial autocorrelation.
 
 ## LLM-use protocol (assignment requirement)
 

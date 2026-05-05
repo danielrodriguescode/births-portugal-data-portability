@@ -39,7 +39,7 @@ This document satisfies the course requirement to "clearly indicate: source link
 
 ---
 
-## 2. PORDATA — Births by Region and Year
+## 2. PORDATA — Births by Município and Year
 
 | Field | Value |
 |---|---|
@@ -47,48 +47,69 @@ This document satisfies the course requirement to "clearly indicate: source link
 | **Publisher** | Fundação Francisco Manuel dos Santos (aggregator of INE / Eurostat data) |
 | **Local file** | `data/raw/pordata.xlsx` |
 | **Format** | XLSX (multi-row headers — see import notes in CLAUDE.md) |
-| **Time period** | Project uses 2010 onwards to align with the SNS dataset |
-| **Granularity** | One row per (region × year) |
-| **Study population** | All live births occurring to mothers resident in each NUTS II / NUTS III region of Portugal |
+| **Time period** | Active analysis: **2014–2024** |
+| **Granularity** | One row per (município × year) — sheet "Quadro" rows tagged with `Município` in column 1 |
+| **Study population** | All live births to mothers resident in each Continental Portuguese município (308 in PORDATA total; 278 Continental + 30 ilhas) |
 | **Acquisition** | Manual export from PORDATA web interface (no stable direct-download URL) |
 | **License** | PORDATA terms — free for academic use with attribution |
 
-### Variables (planned — confirm against the actual XLSX layout)
+### Variables (after `02_clean.R` processing)
 
 | Variable | Type | Description |
 |---|---|---|
-| `region` | character | NUTS II or NUTS III region name |
-| `nuts_level` | character | "NUTS2" or "NUTS3" |
+| `concelho` | character | Município name, NFC-normalised |
 | `year` | integer | Calendar year |
-| `live_births` | integer | Total live births |
-| `gfr` | numeric | General fertility rate (births per 1000 women aged 15–49) — optional |
-| `cbr` | numeric | Crude birth rate (births per 1000 population) — optional |
+| `live_births` | integer | Total live births to residents that year |
+
+### Aggregation to ULS
+
+`02_clean.R` joins PORDATA with `ulsportugal:::dicionario_mestre` (concelho → ULS). 275 of 278 Continental concelhos map 1:1; the 3 split concelhos (Lisboa, Loures, Porto) are allocated proportionally to freguesia counts per ULS:
+
+- **Lisboa** (24 freguesias) → 13/24 to ULS São José + 8/24 to ULS Santa Maria + 3/24 to ULS Lisboa Ocidental
+- **Loures** (10 freguesias) → 6/10 to ULS Loures-Odivelas + 4/10 to ULS São José
+- **Porto** (7 freguesias) → 4/7 to ULS Santo António + 3/7 to ULS São João
+
+Output table `pordata_uls.rds` has columns `(uls, year, resident_births)`.
 
 ---
 
-## 3. Spatial reference data (NUTS shapefiles)
+## 3. Spatial / administrative reference data (`ulsportugal` R package)
 
 | Field | Value |
 |---|---|
-| **Source link** | https://ec.europa.eu/eurostat/web/gisco/geodata/reference-data/administrative-units-statistical-units/nuts |
-| **Publisher** | Eurostat GISCO |
-| **Local file** | `data/raw/nuts/` (to fetch — see `R/00_download.R`) |
-| **Format** | Shapefile / GeoJSON, EPSG:4326 |
-| **Time period** | NUTS 2021 nomenclature (lock to one revision and document) |
-| **Study population** | Geographic boundaries only, no demographic data |
+| **Source link** | https://github.com/danielrodriguescode/ulsportugal |
+| **Publisher** | Daniel Rodrigues (own package) |
+| **Acquisition** | `remotes::install_github` inside `R/00_setup.R` |
+| **Format** | sf POLYGON / MULTIPOLYGON in EPSG:4326 + tibble dictionaries |
+| **Coverage** | 39 mainland Portuguese ULS + concelho/freguesia → ULS dictionary |
+| **License** | MIT |
+
+### Functions used
+
+- `ulsportugal()` — sf table of the 39 ULS polygons with columns `NOME_ULS`, `NOME_CURTO`, `geometry`.
+- `ulsportugal:::dicionario_mestre` — internal tibble with one row per (Freguesia, Concelho, NOME_ULS, DICO). Used to derive the concelho → ULS share table (see PORDATA aggregation above).
+
+Replaces the original plan's NUTS shapefile fetch — ULS is the actual policy-relevant administrative unit for analyses of Portuguese health-care delivery, and freguesia/concelho granularity exceeds what NUTS 2024 provides.
 
 ---
 
-## Hypotheses
+## Hypotheses (revised after methodological pivot — see prompts.md 2026-05-05)
 
-1. **H1 (primary).** The cross-regional flow index — observed deliveries minus expected deliveries based on regional birth share — is systematically positive across a majority of Portuguese maternity hospitals. Tested via one-sample t-test against zero on the pooled hospital-year distribution.
+Unit of analysis: 39 mainland Unidades Locais de Saúde (ULS).
 
-2. **H2.** Cross-regional flow is more pronounced in larger urban centres (Lisboa, Porto, Coimbra) than elsewhere. Tested via subgroup comparison.
+For each ULS in each year:
+**Mobility = HospitalDeliveries(ULS) − ResidentBirths(ULS)**
 
-3. **H3.** Cross-regional flow has a non-zero temporal trend over the study period. Tested via the fixed-year coefficient in `lmer(flow ~ year + (1 | hospital_id))`.
+where **HospitalDeliveries** comes from Transparência SNS (place of delivery, hospitals geographically inside that ULS) and **ResidentBirths** comes from PORDATA aggregated by concelho via `ulsportugal:::dicionario_mestre` (mother's residence). 4 PPPs reported separately, excluded from the tests.
 
-4. **H4.** Hospitals with positive flow indices cluster geographically rather than being randomly distributed. Tested via Moran's I (`spdep::moran.test`).
+1. **H1.** Mean ULS mobility ≠ 0 (one-sample t-test on the 39 per-ULS means).
+
+2. **H2.** Urban tertiary ULS (Santa Maria, São José, Lisboa Ocidental, São João, Santo António, Coimbra) absorb more than peripheral ULS (Wilcoxon two-sample on per-ULS mean mobility).
+
+3. **H3.** Mobility drifts over time (`lmer(mobility ~ year + (1 | uls))` with `lmerTest` Satterthwaite p-values).
+
+4. **H4.** Spatial clustering of mean mobility (Moran's I on ULS polygon centroids, k=5 nearest-neighbour weights).
 
 ## Analysis strategy summary
 
-Cross-reference annualised hospital delivery counts against PORDATA regional totals weighted by each hospital's baseline capacity share, derive the flow index, run inferential tests (H1–H4), and visualise both descriptively (time series, choropleth) and analytically (observed-vs-expected, Sankey of estimated flow). Full method in `paper/paper.Rmd` § Methods and `R/03_analyse.R`.
+For each ULS in each year, directly compare hospital-side deliveries (SNS) and residence-side births (PORDATA aggregated to ULS). The difference is the mobility metric — no capacity proxy, no redistribution. Inferential tests H1–H4. Full method in `paper/paper.Rmd` § Methods and `R/03_analyse.R`.
