@@ -50,6 +50,7 @@ suppressPackageStartupMessages({
   library(readr)
   library(stringi)
   library(lme4)
+  library(lmerTest)   # adds Satterthwaite p-values to lmer fits
   library(broom)
   library(broom.mixed)
   library(spdep)
@@ -129,7 +130,39 @@ nb     <- knn2nb(knearneigh(coords, k = 5))
 lw     <- nb2listw(nb, style = "W")
 h4     <- moran.test(hospital_means$mean_flow, lw)
 
-saveRDS(list(h1 = h1, lmer = m_lmer, h4 = h4),
+# ---- H2: urban tertiary centres absorb more than peripheral hospitals ------
+# Pre-registered subgroup: hospitals classified as urban tertiary centres in
+# Lisboa, Porto, or Coimbra (the three cities the project plan calls out by
+# name). Two-sample Wilcoxon (Mann-Whitney) on hospital-level mean flow,
+# robust to non-normality given the long left tail visible in the data.
+urban_tertiary_pattern <- paste(
+  "Centro Hospitalar Universit.rio Lisboa Central",
+  "Centro Hospitalar Universit.rio de Lisboa Norte",
+  "Centro Hospitalar Universit.rio de Santo Ant.nio",
+  "Centro Hospitalar Universit.rio de S.o Jo.o",
+  "Centro Hospitalar Universit.rio do Porto",
+  "Centro Hospitalar e Universit.rio de Coimbra",
+  sep = "|"
+)
+
+hospital_means <- hospital_means |>
+  mutate(urban_tertiary = grepl(urban_tertiary_pattern, instituicao))
+
+h2 <- wilcox.test(mean_flow ~ urban_tertiary, data = hospital_means,
+                  conf.int = TRUE)
+
+# ---- Confidence intervals via broom.mixed for the lmer fit ------------------
+lmer_tidy <- broom.mixed::tidy(m_lmer, conf.int = TRUE, effects = "fixed")
+
+# ---- Residual diagnostics for the mixed model -------------------------------
+diag_df <- tibble::tibble(
+  fitted   = fitted(m_lmer),
+  resid    = residuals(m_lmer),
+  std_resid = scale(residuals(m_lmer))[, 1]
+)
+
+saveRDS(list(h1 = h1, h2 = h2, lmer = m_lmer, lmer_tidy = lmer_tidy,
+             h4 = h4, diag = diag_df, hospital_means = hospital_means),
         file.path(proc_dir, "models.rds"))
 
 # ---- Headline numbers for RESULTS.md and the dashboard ----------------------
@@ -140,20 +173,34 @@ iqr_flow             <- IQR(expected$flow_index, na.rm = TRUE)
 year_range           <- paste(range(expected$year), collapse = "–")
 lmer_year_coef       <- fixef(m_lmer)["year"]
 
+lmer_year_row <- lmer_tidy |> filter(term == "year")
+lmer_ci       <- sprintf("[%.2f, %.2f]",
+                         lmer_year_row$conf.low, lmer_year_row$conf.high)
+n_urban   <- sum(hospital_means$urban_tertiary)
+n_other   <- sum(!hospital_means$urban_tertiary)
+
 headline <- tibble::tibble(
-  metric = c("n_hospitals", "share_positive_flow", "median_flow",
-             "iqr_flow", "year_range",
-             "h1_t",   "h1_p",
-             "h3_year_coef",
+  metric = c("n_hospitals", "n_urban_tertiary", "n_other",
+             "share_positive_flow", "median_flow", "iqr_flow", "year_range",
+             "h1_t", "h1_p",
+             "h2_wilcox_W", "h2_p", "h2_diff_estimate", "h2_diff_ci",
+             "h3_year_coef", "h3_year_ci", "h3_year_p",
              "h4_moran_I", "h4_moran_p"),
   value  = c(as.character(n_hospitals),
+             as.character(n_urban), as.character(n_other),
              sprintf("%.1f", share_positive_flow),
              sprintf("%.1f", median_flow),
              sprintf("%.1f", iqr_flow),
              year_range,
              sprintf("%.3f", h1$statistic),
              format.pval(h1$p.value, digits = 3, eps = 1e-4),
+             sprintf("%.0f", h2$statistic),
+             format.pval(h2$p.value, digits = 3, eps = 1e-4),
+             sprintf("%.1f", h2$estimate),
+             sprintf("[%.1f, %.1f]", h2$conf.int[1], h2$conf.int[2]),
              sprintf("%.2f", lmer_year_coef),
+             lmer_ci,
+             format.pval(lmer_year_row$p.value, digits = 3, eps = 1e-4),
              sprintf("%.3f", h4$estimate["Moran I statistic"]),
              format.pval(h4$p.value, digits = 3, eps = 1e-4))
 )

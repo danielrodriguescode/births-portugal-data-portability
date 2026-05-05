@@ -89,4 +89,49 @@ fig4 <- hospital_means |>
 ggsave(file.path(fig_dir, "fig04_flow_by_hospital.png"),
        fig4, width = 11, height = 9, dpi = 300)
 
-message("Wrote 4 figures to ", fig_dir)
+# Figure 5 — lmer residual diagnostics
+models <- readRDS(file.path(proc_dir, "models.rds"))
+diag_df <- models$diag
+
+fig5a <- ggplot(diag_df, aes(fitted, resid)) +
+  geom_point(alpha = 0.4) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+  geom_smooth(method = "loess", se = FALSE, colour = "tomato",
+              formula = y ~ x) +
+  labs(x = "Fitted", y = "Residual",
+       title = "Residuals vs fitted (lmer)",
+       subtitle = "Looking for: roughly flat trend and constant spread") +
+  theme_minimal()
+
+fig5b <- ggplot(diag_df, aes(sample = std_resid)) +
+  stat_qq(alpha = 0.4) +
+  stat_qq_line(colour = "tomato") +
+  labs(x = "Theoretical quantiles", y = "Standardised residuals",
+       title = "Q-Q plot of standardised residuals (lmer)") +
+  theme_minimal()
+
+ggsave(file.path(fig_dir, "fig05a_lmer_resid_vs_fitted.png"),
+       fig5a, width = 7, height = 5, dpi = 300)
+ggsave(file.path(fig_dir, "fig05b_lmer_qq.png"),
+       fig5b, width = 6, height = 5, dpi = 300)
+
+# Figure 6 — H2 box/strip: urban tertiary vs other hospitals
+hm <- models$hospital_means |>
+  mutate(group = ifelse(urban_tertiary,
+                        "Urban tertiary (Lisboa/Porto/Coimbra)",
+                        "Other"))
+
+fig6 <- ggplot(hm, aes(group, mean_flow, colour = group)) +
+  geom_boxplot(outlier.shape = NA, fill = NA) +
+  geom_jitter(width = 0.15, alpha = 0.7) +
+  geom_hline(yintercept = 0, colour = "grey50", linetype = "dashed") +
+  labs(x = NULL, y = "Mean flow index per hospital",
+       title = "H2: do urban tertiary centres absorb more cross-regional patients?",
+       subtitle = "Wilcoxon W = 121, p = 0.14 — direction opposite to project plan's prediction") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggsave(file.path(fig_dir, "fig06_h2_urban_vs_other.png"),
+       fig6, width = 7, height = 5, dpi = 300)
+
+message("Wrote 7 figures to ", fig_dir)

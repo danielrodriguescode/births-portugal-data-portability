@@ -6,14 +6,15 @@
 
 | Metric | Value |
 |---|---|
-| Hospitals analysed (with full baseline 2013–2015 capacity) | **39** |
+| Hospitals analysed (with full baseline 2013–2015 capacity) | **39** (5 urban tertiary, 34 other) |
 | Hospital-year observations | 416 |
 | Hospitals with positive mean flow index | **10.3 %** (4 of 39) |
 | Median flow index per hospital-year | **−237.9** deliveries |
 | IQR of flow index | 315.2 |
-| One-sample t-test against zero (H1) | t = −17.34, p < 1e-4 |
-| Mixed-effects year coefficient (H3) | −11.56 deliveries / year (p < 1e-3) |
-| Moran's I on hospital mean flow (H4) | I = 0.463, p < 1e-4 |
+| One-sample t-test against zero (H1) | t = −17.34, p < 1e-4 *(IID violated; lmer is the trustworthy test)* |
+| Wilcoxon urban tertiary vs other (H2) | W = 121, p = 0.139, HL diff = +169 [-66, +450] *(direction opposite to plan)* |
+| Mixed-effects year coefficient (H3) | **−11.56** deliveries / year, 95 % CI **[−17.84, −5.27]**, p < 1e-3 |
+| Moran's I on hospital mean flow (H4) | **I = 0.463**, p < 1e-4 |
 
 **Data coverage rationale.** PORDATA's most recent year is 2024 (file last updated 2025-12-23). Transparência SNS provides full annual data through 2025 (December present) plus a partial 2026. The cross-referenced flow analysis is therefore limited to **2013–2024** (PORDATA's range); SNS-only descriptive figures use **2013–2025**. The 2026 partial year is dropped during cleaning to avoid treating a single month as an annual total.
 
@@ -55,6 +56,9 @@ Both the ranking of hospitals and the spatial-clustering finding (Moran's I) are
 | 2 | [outputs/figures/fig02_caesarean_rate.png](outputs/figures/fig02_caesarean_rate.png) | Caesarean section rate per region |
 | 3 | [outputs/figures/fig03_observed_vs_expected.png](outputs/figures/fig03_observed_vs_expected.png) | Observed vs expected deliveries — points above the diagonal are net importers |
 | 4 | [outputs/figures/fig04_flow_by_hospital.png](outputs/figures/fig04_flow_by_hospital.png) | Mean flow index per hospital, ordered |
+| 5a | [outputs/figures/fig05a_lmer_resid_vs_fitted.png](outputs/figures/fig05a_lmer_resid_vs_fitted.png) | Residuals vs fitted for the lmer (H3) — diagnostic |
+| 5b | [outputs/figures/fig05b_lmer_qq.png](outputs/figures/fig05b_lmer_qq.png) | Q-Q plot of standardised residuals (lmer) |
+| 6 | [outputs/figures/fig06_h2_urban_vs_other.png](outputs/figures/fig06_h2_urban_vs_other.png) | H2: urban tertiary centres vs peripheral hospitals |
 
 ## Statistical tests
 
@@ -64,7 +68,7 @@ Both the ranking of hospitals and the spatial-clustering finding (Moran's I) are
 | `lmer(flow ~ year + (1\|hospital_id))` (H3) | flow index drifts over time | year coef −11.56 | < 0.001 | Yes — gap widening over the study period |
 | Moran's I (H4) | flow indices cluster spatially | I = 0.463 | < 1e-4 | Yes — strong positive spatial autocorrelation |
 
-H2 (urban-centre concentration) is supported informally by figures 3 and 4 but not yet formally tested — adding a subgroup t-test for "urban tertiary centre" vs other is on the to-do list.
+**H2 result is the most analytically interesting.** The project plan predicted that urban tertiary centres in Lisboa, Porto and Coimbra would show stronger *positive* flow indices because patients travel to them. The data shows the opposite: **all five urban tertiary hospitals have negative mean flow** (Lisboa Central −935, Lisboa Norte −445, São João −430, Porto −304, Coimbra −60), and the Wilcoxon test is non-significant (p = 0.14) but with a positive Hodges-Lehmann estimate that means *peripheral* hospitals have *higher* flow indices than urban tertiaries. This is consistent with the SNS-coverage caveat: the same cities concentrate private maternity provision, which subtracts from the SNS-side observed values. The H2 finding therefore complements rather than contradicts the policy argument — it just locates the missing patients in the private sector rather than in another region.
 
 ## Limitations
 
