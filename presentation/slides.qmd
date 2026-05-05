@@ -111,7 +111,7 @@ If hospitals across Portugal are systematically delivering for mothers from outs
 ## Thank you {.center}
 
 Code, data dictionary, paper, and dashboard:
-**github.com/<user>/births-portugal-data-portability**
+**github.com/danielrodriguescode/births-portugal-data-portability**
 
 Questions?
 
