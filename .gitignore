@@ -1,0 +1,34 @@
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Raw data — fetched at runtime by R/00_download.R; PORDATA exported manually.
+# Not committed to keep the public repo free of upstream data licences.
+data/raw/*
+!data/raw/.gitkeep
+
+# Pipeline artefacts (rebuildable from data/raw via run_all.R)
+data/processed/*
+!data/processed/.gitkeep
+outputs/figures/*
+!outputs/figures/.gitkeep
+outputs/tables/*
+!outputs/tables/.gitkeep
+
+# Knitted paper
+paper/paper.html
+paper/paper.pdf
+paper/*_files/
+paper/*_cache/
+
+# Shiny / rsconnect
+rsconnect/
+
+# OS
+.DS_Store
+
+# Claude Code local config (machine-specific, not project source)
+.claude/settings.local.json

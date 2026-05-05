@@ -1,0 +1,120 @@
+---
+title: "Births in Portugal"
+subtitle: "Hospital Cross-Referencing & the Case for Health Data Portability"
+author: "Daniel Rodrigues"
+format:
+  revealjs:
+    theme: simple
+    slide-number: true
+    transition: fade
+    width: 1280
+    height: 720
+    incremental: false
+    footer: "PLCDS — Laboratory Project in Health Data Science"
+---
+
+## The question {.smaller}
+
+Portuguese mothers are *expected* to deliver in their home Região de Saúde.
+
+In practice — they don't. Proximity, perceived quality, referral protocols, high-risk pregnancy pathways all push deliveries across regional lines.
+
+::: {.fragment}
+**If a mother delivers outside her region, do her prenatal records follow her?**
+:::
+
+::: {.fragment .fade-up}
+*Spoiler: not by default.*
+:::
+
+::: {.notes}
+30 seconds. Open with the question. Don't get into the data yet — just frame why this matters clinically.
+:::
+
+---
+
+## Two open datasets, one cross-reference {.smaller}
+
+| Dataset | Tells us |
+|---|---|
+| **PORDATA** | Births by **region of residence**, by year |
+| **Transparência SNS** | Deliveries by **hospital**, by month |
+
+::: {.fragment}
+Cross-reference the two:
+
+$$\text{Expected}(h, r, t) = \text{TotalBirths}(r, t) \cdot \frac{\text{Capacity}(h)}{\sum_{h' \in r} \text{Capacity}(h')}$$
+:::
+
+::: {.fragment}
+**Cross-regional flow index** = Observed − Expected.
+:::
+
+::: {.notes}
+1 minute. Walk through the two datasets, then the formula in plain language: each hospital's "fair share" of regional births based on its capacity.
+:::
+
+---
+
+## Headline finding
+
+::: {.r-fit-text}
+*placeholder for headline number*
+:::
+
+::: {.fragment}
+- *X% of Portuguese maternity hospitals show a positive flow index.*
+- *Pooled t-test against zero: p = ...*
+- *Mixed-effects model: trend coefficient = ... per year.*
+:::
+
+::: {.notes}
+1.5 minutes. This is the punchline — give the number, then the certainty around it (t-test, mixed model).
+:::
+
+---
+
+## The dashboard {background-color="#f3f4f6"}
+
+![](placeholder-screenshot.png){fig-align="center" width="80%"}
+
+::: {.fragment}
+Live demo: [shinyapps.io/births-portugal](#)
+:::
+
+::: {.notes}
+1 minute. Screenshot tour, then if time allows, switch to the live app for the Hospital Explorer.
+:::
+
+---
+
+## Limitations & implication {.smaller}
+
+**What this analysis cannot do**
+
+- The SNS dataset records hospital region, not maternal residence — flow is *structural*, not individual-level.
+- "Capacity" is a historical-volume proxy, not licensed beds.
+- Norte / Centro Região de Saúde ≠ NUTS II Norte / Centro — every cross-reference inherits that mismatch.
+
+::: {.fragment}
+**What it does say**
+
+If hospitals across Portugal are systematically delivering for mothers from outside their region, then prenatal records held regionally are, by construction, in the wrong place when delivery happens. **The SNS needs portable, interoperable maternal health records — not as a convenience, but as a clinical safety requirement.**
+:::
+
+::: {.notes}
+1.5 minutes. Don't oversell — list the limitations first, then the policy implication. Leaves room for a strong question round.
+:::
+
+---
+
+## Thank you {.center}
+
+Code, data dictionary, paper, and dashboard:
+**github.com/<user>/births-portugal-data-portability**
+
+Questions?
+
+::: {.notes}
+End on the repo URL. Q&A is 5 minutes.
+:::

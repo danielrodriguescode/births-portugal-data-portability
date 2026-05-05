@@ -1,0 +1,23 @@
+* text=auto eol=lf
+
+*.R         text diff=r
+*.Rmd       text
+*.qmd       text
+*.md        text
+*.bib       text
+*.csv       text
+*.yml       text
+*.yaml      text
+
+# Treat these as binary
+*.xlsx      binary
+*.xls       binary
+*.pdf       binary
+*.docx      binary
+*.png       binary
+*.jpg       binary
+*.rds       binary
+*.RData     binary
+
+# Stop GitHub linguist from claiming this is a JS project, etc.
+*.js linguist-vendored

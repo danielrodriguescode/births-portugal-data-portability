@@ -1,0 +1,54 @@
+---
+title: "Births in Portugal: Regional Analysis, Hospital Cross-Referencing, and the Case for Health Data Portability"
+author: "Daniel Rodrigues"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+  pdf_document:
+    toc: true
+    number_sections: true
+bibliography: references.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(here)
+library(dplyr)
+library(ggplot2)
+```
+
+# Abstract
+
+See `PhD_Project_Plan_Births_Portugal.docx` for the canonical abstract; reproduce here once the analysis is final.
+
+# Introduction
+
+# Methods
+
+## Data sources
+
+PORDATA (regional births by NUTS II/III, annual) and the Transparência SNS *Partos e Cesarianas* dataset (deliveries per hospital, monthly).
+
+## Cross-regional flow index
+
+For hospital `h` in Região de Saúde `r` in year `t`:
+
+$$\text{Expected}(h,r,t) = \text{TotalBirths}(r,t) \times \frac{\text{Capacity}(h,t)}{\sum_{h' \in r} \text{Capacity}(h',t)}$$
+
+The flow index is `Observed − Expected`.
+
+## Statistical approach
+
+One-sample t-test against zero; mixed-effects model `lmer(flow ~ year + (1 | hospital))`; Moran's I for spatial autocorrelation.
+
+# Results
+
+```{r fig1, fig.cap="Annual deliveries by Região de Saúde."}
+knitr::include_graphics(here("outputs", "figures", "fig01_deliveries_by_region.png"))
+```
+
+# Discussion
+
+# References
