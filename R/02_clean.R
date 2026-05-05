@@ -87,14 +87,10 @@ partos_annual <- partos |>
 #             col 2 = region/territory name, cols 3..21 = live births.
 # We only need the Total block (cols 1,2,3..21) at NUTS II / NUTS III granularity.
 
-# Re-read raw to recover full layout (raw_pordata.rds was a quick first pass).
-pordata_full <- readxl::read_excel(
-  here::here("data", "raw", "pordata.xlsx"),
-  sheet = 1, col_names = FALSE, .name_repair = "minimal"
-)
-
-year_labels  <- as.integer(unlist(pordata_full[6, 3:21]))
-total_block  <- pordata_full[7:nrow(pordata_full), c(1, 2, 3:21)]
+# Use the unparsed RDS persisted by 01_import.R (col_names = FALSE preserves
+# the multi-block layout PORDATA exports).
+year_labels  <- as.integer(unlist(pordata_raw[6, 3:21]))
+total_block  <- pordata_raw[7:nrow(pordata_raw), c(1, 2, 3:21)]
 names(total_block) <- c("nuts_level", "region", as.character(year_labels))
 
 pordata_annual <- total_block |>

@@ -48,9 +48,9 @@ See [data/DATA_DICTIONARY.md](data/DATA_DICTIONARY.md) for full variable descrip
 
 | Dataset | Source | File |
 |---|---|---|
-| Deliveries by hospital | [Transparência SNS](https://transparencia.sns.gov.pt/explore/dataset/partos-e-cesarianas/) | `data/raw/partos-e-cesarianas.csv` |
-| Births by region & year | [PORDATA](https://www.pordata.pt) | `data/raw/pordata.xlsx` (manual export) |
-| NUTS shapefiles | [Eurostat GISCO](https://ec.europa.eu/eurostat/web/gisco/geodata/reference-data/administrative-units-statistical-units/nuts) | `data/raw/nuts/` (auto-fetched) |
+| Deliveries by hospital (monthly cumulative YTD) | [Transparência SNS](https://transparencia.sns.gov.pt/explore/dataset/partos-e-cesarianas/) | `data/raw/partos-e-cesarianas.csv` (auto-fetched) |
+| Live births by region of residence (annual) | [PORDATA](https://www.pordata.pt) | `data/raw/pordata.xlsx` (manual export) |
+| ULS sf polygons (39 mainland Unidades Locais de Saúde) | [`ulsportugal` R package](https://github.com/danielrodriguescode/ulsportugal) | installed via `remotes::install_github` |
 
 ## Repository layout
 

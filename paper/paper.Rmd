@@ -3,10 +3,10 @@ title: "Births in Portugal: Regional Analysis, Hospital Cross-Referencing, and t
 author: "Daniel Rodrigues"
 date: "`r Sys.Date()`"
 output:
-  html_document:
+  pdf_document:
     toc: true
     number_sections: true
-  pdf_document:
+  html_document:
     toc: true
     number_sections: true
 bibliography: references.bib

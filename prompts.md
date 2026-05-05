@@ -67,3 +67,34 @@ The actual bug: SNS monthly values are **cumulative year-to-date** within each y
 2. **Read the data dictionary or, failing that, eyeball a single entity across consecutive months.** Cumulative-YTD counters are a common pattern in administrative dashboards and the Transparência SNS schema doesn't flag it explicitly.
 3. **Be sceptical of an LLM's "discovered limitation" when the numbers seem off** — Claude's first-pass interpretation was to attribute the 5× discrepancy to "structural under-coverage of SNS vs private hospitals", which sounded plausible enough that it almost survived. The real explanation was a one-line bug in `02_clean.R`. *Plausible-sounding causal narratives are exactly the kind of error LLMs are most prone to: fluent, coherent, and wrong.*
 4. The corrected analysis (Moran's I = 0.458, p < 1e-4 for spatial clustering; flow ranking matches prior expectations) is now defensible and the policy argument holds.
+
+---
+
+### 2026-05-05 — P0 data-quality fixes (partial year filtering, hospital identity drift)
+
+**Prompt:** Review the pipeline against the assignment rubric — flag erros and prioritise fixes.
+
+**Response (summary):** Claude inspected `partos_annual` and identified two further bugs:
+1. The SNS file currently extends to 2026-01 for some hospitals. Because we take the latest reported month per year via `slice_max(date, n = 1)`, a single January value was being treated as a full annual total (5,579 partos vs. ~67k expected). Fix: drop any year whose latest reported month is not December.
+2. Six hospitals had two `hospital_id` values because their reported lat/lng changes very slightly across SNS releases (Cascais and 5 ULS units). The `distinct(instituicao, regiao, lat, lng)` call was too strict. Fix: drop lat/lng from the identity key; take the latest reported coordinates as canonical.
+
+After re-running the pipeline, the analysis window settled at 2013–2024 (intersection with PORDATA) for the cross-referenced flow analysis and 2013–2025 for SNS-only descriptives. Substantive findings unchanged: same hospitals top the inflow/outflow ranking, Moran's I 0.463 vs 0.458 before. 416 hospital-year observations now (vs 410).
+
+**Critical comment:** _to fill in. Two things worth flagging here for grading: (a) the original CLAUDE.md was actively wrong on this point — it said "build a stable hospital ID by hashing the geocoordinate", which is exactly the anti-pattern that produced the duplicates. The LLM's prior advice did not survive contact with real data; that admission belongs in the paper Discussion. (b) The fix is *defensive* in spirit (we drop all 2026 even though March 2026 may eventually be complete) — for the final paper I should re-run with whatever PORDATA/SNS releases are available at submission time and document the cut-off explicitly._
+
+---
+
+### 2026-05-05 — P1: H2 test, lmer with Satterthwaite, ulsportugal-based dashboard
+
+**Prompt:** Implement P1: H2 subgroup test, lmer confidence intervals and residual diagnostics, choropleth in the Shiny app, and the Cross-Regional Flow heatmap. Use the `ulsportugal` R package (my own, github.com/danielrodriguescode/ulsportugal) for the spatial backbone instead of NUTS shapefiles.
+
+**Response (summary):** Claude:
+- switched the lmer fit from `lme4::lmer` to `lmerTest::lmer` to obtain Satterthwaite p-values for the year coefficient (β = −11.56, 95 % CI [−17.84, −5.27], p < 1e-3);
+- implemented H2 as a Wilcoxon two-sample on hospital-level mean flow with `urban_tertiary` defined by name pattern (the five Centros Hospitalares Universitários in Lisboa/Porto/Coimbra). Result: W = 121, p = 0.14, Hodges-Lehmann diff +169 [−66, +450] — **direction opposite to the project plan's prediction**;
+- generated lmer residual diagnostics (resid vs fitted, std-resid Q-Q) plus an H2 box+strip plot;
+- rebuilt the Shiny app from scratch around six tabs (Answer / Regional Overview / Hospital Explorer / Cross-Regional Flow / Methods plain language / Data) with the choropleth driven by `ulsportugal::ulsportugal()` sf polygons and a point-in-polygon `st_join` of hospital coordinates;
+- rewrote the presentation slides with the real headline numbers and a five-row H2 table.
+
+**Critical comment:** _to fill in. The H2 result is the most analytically interesting outcome of the whole project: my project plan predicted urban tertiaries would have positive flow (absorbing patients), but the empirics show the opposite. The most parsimonious explanation — that the same cities concentrate private maternity care, which is invisible to the SNS dataset — strengthens rather than weakens the policy argument: care fragmentation is not just inter-regional, it's inter-sector. I should make this the centrepiece of the paper Discussion rather than burying it as a "limitation". One judgement call to verify before submission: the urban-tertiary definition is restricted to CHUs in Lisboa/Porto/Coimbra (five hospitals); the project plan also lists "larger urban centres" generically — should I broaden to include all hospitals serving cities with >250k population? Sensitivity analysis recommended._
+
+Also worth flagging that the LLM's *first* P1 attempt to embed the headline numbers into the dashboard placeholder text used the obsolete cumulative-bug numbers (n=39 hospitals × 11 years instead of 12). Caught only by reading the `headline.csv` file directly. Lesson reinforces entry above: **read the artefacts, not just the prose**.

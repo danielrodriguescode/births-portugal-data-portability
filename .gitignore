@@ -18,11 +18,25 @@ outputs/figures/*
 outputs/tables/*
 !outputs/tables/.gitkeep
 
-# Knitted paper
+# Knitted paper + LaTeX intermediates
 paper/paper.html
 paper/paper.pdf
+paper/paper.knit.md
+paper/paper.utf8.md
+paper/paper.aux
+paper/paper.log
+paper/paper.tex
+paper/paper.toc
+paper/paper.synctex.gz
 paper/*_files/
 paper/*_cache/
+
+# Office lock files
+**/~$*
+
+# Knitted slides
+presentation/slides.html
+presentation/slides_files/
 
 # Shiny / rsconnect
 rsconnect/
