@@ -17,23 +17,33 @@
 
 ## Plain-language reading
 
-1. **The flow index is mostly negative.** Across the 410 hospital-year observations, SNS hospitals delivered fewer babies than PORDATA's regional birth counts would predict if every birth in that region went through the SNS network. *This is the structural finding that motivates the policy argument — but see "Caveat" below.*
+1. **The flow index is mostly slightly negative**, reflecting that SNS hospitals capture roughly 80–87 % of Portugal's continental live births while PORDATA captures essentially all of them. The residual 13–20 % shows up as a structural negative bias in the flow index.
 
 2. **A handful of hospitals are clear net importers** (positive flow index): Centro Hospitalar Póvoa de Varzim/Vila do Conde (+253/year), Centro Hospitalar de Leiria (+85), Centro Hospitalar do Baixo Vouga (+41). These are mid-sized institutions in border zones between Regiões de Saúde — exactly where you would expect cross-regional draw.
 
-3. **The largest "outflow" hospitals are paradoxically the largest urban centres** (Lisboa Central −935/year, Fernando Fonseca −659, Algarve −530). This is **not** evidence that residents leave — it is evidence that PORDATA captures all live births to residents whereas Transparência SNS captures only deliveries at SNS-affiliated hospitals. Private maternity hospitals (which are concentrated in Lisbon, Porto, and the Algarve) are missing from SNS data, so the regional SNS total is structurally below the PORDATA total.
+3. **The largest negative flow indices cluster in urban centres** (Lisboa Central −935/year, Fernando Fonseca −659, Algarve −530). This is consistent with private maternity provision being concentrated in Lisboa, Porto, and the Algarve — those regions' "expected" deliveries (based on PORDATA's residence-based count) overshoot what the SNS hospitals actually deliver, by roughly the share of the local maternity market that is private.
 
 4. **Spatial clustering is strong** (Moran's I = 0.458, p < 0.0001): hospitals with similar flow indices cluster geographically. This is the cleanest evidence that the dispersion is not random — patient flow has spatial structure, which is what the policy argument requires.
 
 5. **Flow indices are drifting downward over time** (year coefficient = −12.75, p < 0.001) — i.e., the gap between observed SNS deliveries and PORDATA regional totals is widening at ~13 deliveries per hospital per year, suggesting a continued shift toward the private sector or other non-SNS provision.
 
-## Caveat — what this analysis cannot do
+## Caveat — what the analysis can and cannot say
 
-The "expected" formula treats PORDATA regional births as the universe of deliveries that *should* go through SNS. National totals show that's not the case: SNS captures roughly **20 %** of PORDATA's regional birth counts (2014: 82,367 SNS deliveries vs roughly 5× that in PORDATA's residence-based count — see `outputs/tables/national_comparison.csv` once that table is generated). The flow index is therefore a **mixed signal**:
+Comparison of national totals (after fixing a year-to-date cumulative-counter bug in the SNS data, which initially inflated SNS totals 6×):
+
+| Year | SNS hospital deliveries | PORDATA Portugal total | PORDATA Continental | Ratio (SNS / Continental) |
+|---|---|---|---|---|
+| 2014 | 67,672 | 82,367 | 78,312 | 0.86 |
+| 2018 | 72,034 | 87,020 | 82,946 | 0.87 |
+| 2023 | 66,377 | 85,699 | ~81,500 | 0.81 |
+
+**SNS captures roughly 80–87 % of continental Portuguese births.** The remaining 13–20 % are deliveries in private hospitals, at home, or abroad. Private maternity provision is concentrated in Lisboa, Porto, and the Algarve, which is consistent with the strongly negative flow indices observed at large urban SNS hospitals (Lisboa Central, Fernando Fonseca, Algarve).
+
+The flow index therefore conflates two effects:
 - *True cross-regional flow* (mothers crossing region boundaries to deliver), and
-- *Public-vs-private SNS coverage gap* (the share of regional births that take place in private clinics not reporting to Transparência SNS).
+- *Public-vs-private coverage gap* (the share of regional births in private clinics not reporting to Transparência SNS — large in urban regions, small elsewhere).
 
-The ranking of hospitals (who is most above/below their predicted share) remains meaningful and consistent with prior expectations. Absolute flow values do not — they are biased downward by the SNS coverage gap.
+Both the ranking of hospitals and the spatial-clustering finding (Moran's I) are robust to this issue. Absolute flow values are biased downward, but the bias is moderate (~15 %) rather than catastrophic (the 5× figure I reported in an earlier draft was incorrect — it stemmed from a cumulative-counter bug in the SNS data, since fixed).
 
 ## Key figures
 
