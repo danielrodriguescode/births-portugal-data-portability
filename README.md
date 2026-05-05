@@ -6,7 +6,7 @@
 
 PhD Laboratory Project in Health Data Science. Quantifies inter-regional obstetric patient flow in Portugal by cross-referencing PORDATA regional birth statistics against hospital-level deliveries from the Transparência SNS *Partos e Cesarianas* dataset, and uses the result to argue for health data portability across SNS institutions.
 
-**Author:** Daniel Rodrigues — solo submission.
+**Authors:** Daniel Rodrigues, Diana Cibele, Madhuri Desai.
 
 ## Deliverables
 
