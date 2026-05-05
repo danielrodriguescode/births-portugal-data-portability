@@ -12,7 +12,7 @@ This document satisfies the course requirement to "clearly indicate: source link
 | **Publisher** | Serviços Partilhados do Ministério da Saúde (SPMS) / Direção-Geral da Saúde (DGS) |
 | **Local file** | `data/raw/partos-e-cesarianas.csv` |
 | **Format** | CSV, semicolon-delimited, UTF-8 with BOM |
-| **Time period** | 2013-01 → most recent monthly release (currently used: 2013-01 onwards) |
+| **Time period** | 2013-01 → most recent monthly release. Analysis window: 2013–2025 (full SNS years); cross-referenced flow analysis 2013–2024 (intersection with PORDATA). |
 | **Granularity** | One row per (hospital × month) |
 | **Study population** | All deliveries recorded in Portuguese SNS hospitals reporting to the Transparência platform |
 | **License** | Open data, attribution to Transparência SNS / Ministério da Saúde |
@@ -25,8 +25,10 @@ This document satisfies the course requirement to "clearly indicate: source link
 | Região | `regiao` | character | Região de Saúde (5 categories: Norte, Centro, LVT, Alentejo, Algarve) |
 | Instituição | `instituicao` | character | Hospital / institution name (mutates across releases — see CLAUDE.md) |
 | Localização Geográfica | `localizacao_geografica` | character | "lat, lng" pair, decimal degrees, WGS84 |
-| Nº Total de Partos | `n_total_de_partos` | integer | Total deliveries that month |
-| Nº Cesarianas | `n_cesarianas` | integer | Caesarean deliveries that month (subset of total) |
+| Nº Total de Partos | `no_total_de_partos` | integer | **Cumulative year-to-date** total deliveries (see quirk below) |
+| Nº Cesarianas | `no_cesarianas` | integer | **Cumulative year-to-date** caesarean deliveries (subset of total) |
+
+> ⚠ **Critical data-semantics quirk** — the *Nº Total de Partos* and *Nº Cesarianas* columns are **cumulative year-to-date counters**, not per-month deliveries. Example: Hospital de Cascais 2013-01 = 206, 2013-02 = 383 (= Jan + Feb), …, 2013-12 = 2,304 (annual total); 2014-01 = 191 (counter resets in January). This is undocumented in the published Transparência SNS schema. The annual total per hospital is therefore the **December** value (or the latest available month, if December is missing), **never the sum across months**. `R/02_clean.R` enforces this with `slice_max(date, n = 1)` per hospital-year and additionally drops any year whose latest reported month is not December.
 
 ### Derived variables (created in `R/02_clean.R`)
 

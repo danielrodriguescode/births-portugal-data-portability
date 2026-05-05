@@ -24,6 +24,16 @@ pordata_raw <- readRDS(file.path(proc_dir, "raw_pordata.rds"))
 # 2013-12 = 2,304 (annual total); 2014-01 = 191 (counter resets).
 # Therefore the annual total per hospital is the LATEST month within each
 # year, NOT the sum across months.
+#
+# Two data-quality steps applied here:
+#   1. Drop years that are not yet complete (latest month != December). The
+#      file currently runs to 2026-01 for some hospitals — keeping it would
+#      treat one month of 2026 as a full-year total.
+#   2. Hospital identity is keyed on (instituicao, regiao) only. Lat/lng
+#      drifts across SNS releases (Cascais and 5 ULS units have two slightly
+#      different coordinates), so joining on lat/lng would split a single
+#      hospital into multiple ids. We pick the latest reported coordinates
+#      as the canonical location.
 
 partos <- partos_raw |>
   clean_names() |>
@@ -33,12 +43,28 @@ partos <- partos_raw |>
   ) |>
   separate(localizacao_geografica, into = c("lat", "lng"), sep = ",\\s*", convert = TRUE)
 
+# Step 1: keep only years where the latest reported month is December
+complete_years <- partos |>
+  group_by(year) |>
+  summarise(latest_month = max(date), .groups = "drop") |>
+  filter(month(latest_month) == 12) |>
+  pull(year)
+
+partos <- partos |> filter(year %in% complete_years)
+
+# Step 2: hospital identity = (instituicao, regiao); take the latest reported
+# coordinates as the canonical location.
 hospitals <- partos |>
-  distinct(instituicao, regiao, lat, lng) |>
+  group_by(instituicao, regiao) |>
+  slice_max(date, n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  transmute(instituicao, regiao, lat, lng) |>
+  arrange(instituicao, regiao) |>
   mutate(hospital_id = paste0("H", sprintf("%04d", row_number())))
 
 partos_annual <- partos |>
-  inner_join(hospitals, by = c("instituicao", "regiao", "lat", "lng")) |>
+  inner_join(hospitals |> select(instituicao, regiao, hospital_id),
+             by = c("instituicao", "regiao")) |>
   group_by(hospital_id, instituicao, regiao, year) |>
   slice_max(date, n = 1, with_ties = FALSE) |>
   ungroup() |>
