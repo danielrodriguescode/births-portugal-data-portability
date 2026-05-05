@@ -1,19 +1,28 @@
 # region_crosswalk.R
-# Mapping between Regiões de Saúde (used in partos-e-cesarianas.csv) and
-# NUTS II / NUTS III (used in PORDATA). Sourced by 02_clean.R and 03_analyse.R.
+# Mapping between PORDATA NUTS 2024 regions (used in pordata.xlsx) and the
+# Regiões de Saúde (used in partos-e-cesarianas.csv). Sourced by 02_clean.R
+# and 03_analyse.R.
 #
-# Sources to cite when filling this in:
-#  - DGS administrative boundaries for Regiões de Saúde
-#  - INE / Eurostat NUTS 2013 or NUTS 2024 definitions (pick one and stick to it)
+# IMPORTANT: pordata.xlsx in this repo uses the NUTS 2024 revision, which
+# splits the old NUTS II "Área Metropolitana de Lisboa" into three NUTS II
+# units: Oeste e Vale do Tejo, Grande Lisboa, Península de Setúbal. The
+# Região de Saúde LVT roughly aggregates all three. Confirm boundary
+# alignment against DGS sources before final submission — the empirical fit
+# is approximate, not exact (especially the Tejo concelhos).
 #
-# Norte and Centro Regiões de Saúde do NOT align 1:1 with NUTS II Norte/Centro —
-# document every disputed concelho here with a comment.
+# Madeira and Açores have autonomous regional health systems outside the
+# Continental SNS — we exclude them from cross-referencing because the SNS
+# Partos e Cesarianas dataset does not cover them.
 
-regiao_saude_to_nuts2 <- tibble::tribble(
-  ~regiao_saude,                          ~nuts2,
-  "Região de Saúde Norte",                "Norte",
-  "Região de Saúde Centro",               "Centro",
-  "Região de Saúde LVT",                  "Área Metropolitana de Lisboa",
-  "Região de Saúde do Alentejo",          "Alentejo",
-  "Região de Saúde do Algarve",           "Algarve"
+nuts2_to_regiao_saude <- tibble::tribble(
+  ~nuts2,                              ~regiao_saude,
+  "Norte",                             "Região de Saúde Norte",
+  "Centro",                            "Região de Saúde do Centro",
+  "Oeste e Vale do Tejo",              "Região de Saúde LVT",
+  "Grande Lisboa",                     "Região de Saúde LVT",
+  "Península de Setúbal",              "Região de Saúde LVT",
+  "Alentejo",                          "Região de Saúde do Alentejo",
+  "Algarve",                           "Região de Saúde do Algarve"
+  # "Região Autónoma dos Açores"  — outside Continental SNS
+  # "Região Autónoma da Madeira"  — outside Continental SNS
 )
