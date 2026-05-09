@@ -18,25 +18,23 @@ outputs/figures/*
 outputs/tables/*
 !outputs/tables/.gitkeep
 
-# Knitted paper + LaTeX intermediates
+# Local-only deliverables — the rendered paper (PDF) and oral-defense
+# presentation (PPTX) are produced and kept locally in deliverables/
+# but are NOT committed to the public repo, by project policy.
+deliverables/
+
+# Source files for the paper / slides are likewise not part of the
+# public repo — if regenerated locally, keep them out of git.
+paper/paper.Rmd
+paper/references.bib
 paper/paper.html
 paper/paper.pdf
-paper/paper.knit.md
-paper/paper.utf8.md
-paper/paper.aux
-paper/paper.log
-paper/paper.tex
-paper/paper.toc
-paper/paper.synctex.gz
 paper/*_files/
 paper/*_cache/
+presentation/
 
 # Office lock files
 **/~$*
-
-# Knitted slides
-presentation/slides.html
-presentation/slides_files/
 
 # Shiny / rsconnect
 rsconnect/
