@@ -39,6 +39,10 @@ presentation/
 # Shiny / rsconnect
 rsconnect/
 
+# Shiny bundle data — derived copy of data/processed/ + outputs/tables/headline.csv,
+# rebuilt every time deploy_app.R runs. Never edit by hand and never commit.
+shiny/data/
+
 # OS
 .DS_Store
 

@@ -128,3 +128,25 @@ New headline: 39 ULS, mean mobility = −434 [−691, −178], p = 0.001 (H1); H
 2. _The direct two-source comparison was always available — PORDATA gives residence and SNS gives hospital, and `ulsportugal` exists to bridge them. The LLM constructed a baroque alternative because the project plan I gave it suggested capacity-based Expected. **The plan itself was the bug**, and the LLM optimised for fidelity to the plan rather than for fidelity to the question. This is graded directly under "scientific quality of the research question" (10%) — the lesson is to pressure-test the methodology against the question before trusting any LLM-generated implementation._
 
 The H1 result (mean mobility −434, p=0.001) and the per-ULS rankings (Coimbra +2,213 as biggest magnet; Amadora/Sintra −3,280 as biggest exporter) make immediate clinical sense. The H4 spatial-clustering signal is weaker than the previous version (I=0.115 vs 0.463) because we now use ULS centroids (39 polygons) rather than hospital points — methodologically more correct, the previous large I was partly an artefact of clustered hospitals within Lisbon. Worth noting in the paper Discussion.
+
+---
+
+### 2026-05-09 — shinyapps.io worker timeout: app was reading files outside the bundle
+
+**Prompt:** "I can't connect to the shiny app — `Unable to connect to worker after 60.00 seconds; startup took too long`."
+
+**Response (summary):** Claude diagnosed that `shiny/app.R` was loading three classes of files that live OUTSIDE `shiny/`: (a) `R/region_crosswalk.R` via `source(here::here(...))`, (b) the five `data/processed/*.rds` panels via `here::here("data", "processed")`, and (c) `outputs/tables/headline.csv` via `here::here(...)`. `rsconnect::deployApp("shiny", ...)` only bundles the contents of `appDir`, so on shinyapps.io the very first `readRDS()` failed → the worker died during initialisation → 60-second timeout. `here::here()` made it worse: shinyapps.io has no project-root marker (no `.git`, no `.Rproj`), so even bundling the files via `appFiles` would have left `here()` resolving unpredictably.
+
+The fix Claude proposed and implemented:
+1. Rewrote `shiny/app.R` to use **relative paths** (`"data/foo.rds"`) and dropped `library(here)`. Inlined the 6-element `URBAN_TERTIARY_ULS` constant from `R/region_crosswalk.R` so the app has no out-of-folder source dependency. Added a comment block forbidding the reintroduction of `here::here()` inside the app.
+2. Added `R/sync_shiny_data.R` exposing `sync_shiny_data()` — copies the five required `.rds` plus `headline.csv` into `shiny/data/` (rebuilt from scratch each run so removed outputs don't linger).
+3. Wired the sync into `run_all.R` so a fresh pipeline run leaves `shiny/data/` ready for both local launch and deploy.
+4. Added `deploy_app.R` — calls `sync_shiny_data()` then `rsconnect::deployApp("shiny", appName = "births-portugal")`. `DRY_RUN=TRUE` skips the upload (useful for local sync between pipeline reruns).
+5. Gitignored `shiny/data/` (derived; never edit, never commit).
+
+**Critical comment:** This was a self-inflicted CLAUDE.md violation. The original CLAUDE.md already said "the deployed app reads only from `data/processed/*.rds` bundled into the deploy — keep `shiny/` self-contained" — but the actual `app.R` did the opposite, reading from sibling folders via `here::here()`. The 60-second worker timeout was the predictable consequence. Two lessons:
+
+1. **`here::here()` is great for repo scripts and useless for deployable bundles.** Inside `shiny/app.R`, `here()` is actively harmful: shinyapps.io can't satisfy it. The rule going forward is "no `here::here` in any file inside `shiny/`" — encoded as a comment at the top of `app.R`. Pipeline scripts in `R/` keep using `here()`.
+2. **Self-containment has to be enforced by tooling, not by goodwill.** `deploy_app.R` rebuilding `shiny/data/` from scratch each time means a removed pipeline output (or a stale dev artefact) cannot silently survive into production. The `appName = "births-portugal"` and `forceUpdate = TRUE` are explicit so we never accidentally deploy under a different name.
+
+The previous "deploy" instruction (`rsconnect::deployApp("shiny", appName = "births-portugal")`) was technically syntactically correct but produced a broken app — a useful reminder that "the command runs" is not the same as "the deliverable works".

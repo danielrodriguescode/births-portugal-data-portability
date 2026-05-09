@@ -10,4 +10,9 @@ source(here("R", "02_clean.R"))
 source(here("R", "03_analyse.R"))
 source(here("R", "04_visualise.R"))
 
-message("Pipeline complete. Processed data in data/processed/, figures in outputs/figures/.")
+# Refresh the Shiny bundle so shiny::runApp("shiny") and deploy_app.R both
+# pick up the latest .rds and headline.csv without an extra step.
+source(here("R", "sync_shiny_data.R"))
+sync_shiny_data()
+
+message("Pipeline complete. Processed data in data/processed/, figures in outputs/figures/, Shiny bundle in shiny/data/.")

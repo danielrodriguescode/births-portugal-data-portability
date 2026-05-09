@@ -1,6 +1,11 @@
 # shiny/app.R
-# Single-file Shiny entry point. Reads pre-computed artefacts from data/processed/.
-# Run from project root: shiny::runApp("shiny", launch.browser = TRUE)
+# Single-file Shiny entry point. Self-contained — reads pre-computed artefacts
+# from shiny/data/, populated by deploy_app.R (or shiny::runApp from the repo
+# root after run_all.R has produced fresh data/processed/*.rds).
+#
+# All paths in this file are RELATIVE to the app directory so the bundle works
+# both locally and on shinyapps.io (where here::here() cannot find a project
+# root). Do not reintroduce here::here() — see prompts.md 2026-05-09.
 
 suppressPackageStartupMessages({
   library(shiny)
@@ -11,7 +16,6 @@ suppressPackageStartupMessages({
   library(plotly)
   library(leaflet)
   library(DT)
-  library(here)
   library(sf)
   library(stringi)
   library(scales)
@@ -19,9 +23,19 @@ suppressPackageStartupMessages({
   library(ulsportugal)
 })
 
-source(here::here("R", "region_crosswalk.R"))
+# Urban tertiary ULS used by the H2 grouping (inlined from R/region_crosswalk.R
+# so the bundle has no out-of-folder dependencies). Names are NFC-normalised so
+# joins behave on both macOS (NFD by default in some text editors) and Linux.
+URBAN_TERTIARY_ULS <- vapply(c(
+  "Unidade Local de Saúde de São José, EPE",
+  "Unidade Local de Saúde de Santa Maria, EPE",
+  "Unidade Local de Saúde de Lisboa Ocidental, EPE",
+  "Unidade Local de Saúde de São João, EPE",
+  "Unidade Local de Saúde de Santo António, EPE",
+  "Unidade Local de Saúde de Coimbra, EPE"
+), stri_trans_nfc, character(1), USE.NAMES = FALSE)
 
-proc_dir <- here::here("data", "processed")
+proc_dir <- "data"
 nfc <- function(x) stri_trans_nfc(x)
 
 partos_uls   <- readRDS(file.path(proc_dir, "partos_uls.rds")) |>
@@ -46,7 +60,7 @@ uls_means <- models$uls_means |>
 ppp_panel <- models$ppp_panel
 
 # ---- Headline numbers ------------------------------------------------------
-headline_path <- here::here("outputs", "tables", "headline.csv")
+headline_path <- file.path(proc_dir, "headline.csv")
 headline <- if (file.exists(headline_path)) {
   readr::read_csv(headline_path, show_col_types = FALSE) |> tibble::deframe()
 } else c()

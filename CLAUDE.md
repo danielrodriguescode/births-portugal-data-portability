@@ -46,9 +46,12 @@ R only. Do not introduce Python — the assignment allows it but the project pla
 │   ├── 02_clean.R          # Tidy, deduplicate, harmonise codes
 │   ├── 03_analyse.R        # ULS-level Mobility, H1–H4 tests
 │   ├── 04_visualise.R      # Static figures
-│   └── region_crosswalk.R  # NUTS 2024 ↔ Região de Saúde mapping
+│   ├── region_crosswalk.R  # NUTS 2024 ↔ Região de Saúde mapping + URBAN_TERTIARY_ULS
+│   └── sync_shiny_data.R   # Copy data/processed/ + headline.csv → shiny/data/
 ├── shiny/
-│   └── app.R                # Single-file Shiny entry point (six tabs)
+│   ├── app.R                # Single-file Shiny entry point (six tabs)
+│   └── data/                # Bundle (gitignored) — refilled by sync_shiny_data
+├── deploy_app.R             # Sync + rsconnect::deployApp("shiny")
 ├── outputs/
 │   ├── figures/             # PNG figures (gitignored, regenerable)
 │   └── tables/              # headline.csv (gitignored, regenerable)
@@ -84,14 +87,22 @@ Rscript run_all.R
 # Run a single pipeline stage
 Rscript R/03_analyse.R
 
-# Launch the Shiny app locally
+# Launch the Shiny app locally — run_all.R already populated shiny/data/.
+# If you only ran 03_analyse.R, refresh the bundle first:
+#   DRY_RUN=TRUE Rscript deploy_app.R
 Rscript -e "shiny::runApp('shiny', launch.browser = TRUE)"
 
-# Deploy the app (requires rsconnect set up once with shinyapps.io credentials)
-Rscript -e "rsconnect::deployApp('shiny')"
+# Deploy the app (rebuilds shiny/data/ from pipeline outputs, then uploads).
+# Requires rsconnect::setAccountInfo() to have been run once with shinyapps.io
+# credentials.
+Rscript deploy_app.R
 ```
 
 The paper PDF and the slides PPTX in `deliverables/` are not built by `run_all.R`; they are local-only artefacts and are not part of the GitHub repo.
+
+### Shiny self-containment contract
+
+`shiny/app.R` reads ONLY from `shiny/data/` using paths **relative to the app directory** — never `here::here()`. shinyapps.io has no project-root marker, so `here()` resolves unpredictably there; that is the failure mode that produced the *"Unable to connect to worker after 60.00 seconds"* error in deployment. `shiny/data/` is rebuilt every time `run_all.R` finishes (via `sync_shiny_data()`) and again every time `deploy_app.R` runs, so a removed pipeline output never silently lingers in the deploy. `shiny/data/` is gitignored — never edit by hand, never commit.
 
 There is no formal test suite. If you add validation, prefer `testthat` placed under `tests/testthat/` and runnable with `testthat::test_dir('tests/testthat')`.
 

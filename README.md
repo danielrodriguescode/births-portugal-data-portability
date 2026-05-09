@@ -68,12 +68,18 @@ Headline numbers and figures live in [RESULTS.md](RESULTS.md). Once the pipeline
 ```r
 # One-off: authorise rsconnect with shinyapps.io credentials
 rsconnect::setAccountInfo(name = "<account>", token = "<token>", secret = "<secret>")
-
-# Deploy
-rsconnect::deployApp("shiny", appName = "births-portugal")
 ```
 
-The deployed app reads only from `data/processed/*.rds` bundled into the deploy — keep `shiny/` self-contained.
+```bash
+# Deploy (rebuilds shiny/data/ from data/processed/ + headline.csv, then uploads)
+Rscript deploy_app.R
+
+# Sync shiny/data/ without uploading (useful for local Shiny launches if you
+# haven't just run run_all.R):
+DRY_RUN=TRUE Rscript deploy_app.R
+```
+
+The Shiny app is **self-contained**: it reads only from `shiny/data/`, which is a derived copy of `data/processed/*.rds` plus `outputs/tables/headline.csv`. `run_all.R` rebuilds this folder at the end of the pipeline; `deploy_app.R` rebuilds it again immediately before upload. Do not commit `shiny/data/` — it is gitignored. Do not reintroduce `here::here()` inside `shiny/app.R` — shinyapps.io has no project-root marker and `here()` resolves unpredictably there.
 
 ## Reproducibility
 
