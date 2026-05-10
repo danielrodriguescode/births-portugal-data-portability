@@ -213,7 +213,8 @@ ui <- page_navbar(
           tags$label("Filter by year"),
           div(style = "min-width: 220px;",
               selectInput("year_overview", label = NULL,
-                          choices = year_choices, selected = "mean",
+                          choices = year_choices,
+                          selected = as.character(year_range[2]),
                           width = "100%"))
       )
     ),
@@ -249,10 +250,11 @@ ui <- page_navbar(
     br(),
 
     layout_columns(
-      col_widths = c(8, 4),
+      col_widths = c(9, 3),
       card(
+        full_screen = TRUE,
         card_header(textOutput("map_title", inline = TRUE)),
-        leafletOutput("map_choropleth", height = 540)
+        leafletOutput("map_choropleth", height = 720)
       ),
       div(
         card(
@@ -265,14 +267,16 @@ ui <- page_navbar(
           card_header("Top 5 net exporters"),
           div(style = "padding: 0.5rem 1rem 0.75rem 1rem;",
               uiOutput("rank_export"))
-        ),
-        br(),
-        card(
-          card_header("Statistical evidence"),
-          div(style = "padding: 0.6rem 1rem 0.9rem 1rem;",
-              uiOutput("stat_evidence"))
         )
       )
+    ),
+
+    br(),
+
+    card(
+      card_header("Statistical evidence"),
+      div(style = "padding: 0.5rem 1.5rem 0.9rem 1.5rem;",
+          uiOutput("stat_evidence"))
     )
   ),
 
@@ -436,11 +440,16 @@ server <- function(input, output, session) {
            sprintf("I = %s, p = %s",
                    headline["h4_moran_I"], headline["h4_moran_p"]))
     )
-    tagList(lapply(rows, function(r) {
-      tags$div(style = "padding: 0.4rem 0; border-bottom: 1px solid #F3F4F6;",
-               tags$div(style = "color: #6B7280; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;", r[[1]]),
-               tags$div(class = "stat-num", style = "color: #1F2937; font-size: 0.92rem;", r[[2]]))
-    }))
+    cells <- lapply(rows, function(r) {
+      tags$div(style = "padding: 0.5rem 1rem; border-left: 1px solid #F3F4F6;",
+               tags$div(style = "color: #6B7280; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.25rem;", r[[1]]),
+               tags$div(class = "stat-num", style = "color: #1F2937; font-size: 0.95rem;", r[[2]]))
+    })
+    # Drop the leading divider on the first cell so it doesn't show against the card edge.
+    cells[[1]]$attribs$style <- sub("border-left: 1px solid #F3F4F6;", "",
+                                    cells[[1]]$attribs$style, fixed = TRUE)
+    tags$div(style = "display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;",
+             tagList(cells))
   })
 
   # Choropleth
