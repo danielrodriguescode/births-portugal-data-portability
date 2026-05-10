@@ -168,15 +168,42 @@ custom_css <- "
                      font-size: 0.86rem; }
   table.dataTable { font-variant-numeric: tabular-nums; }
 
-  /* Fix value-box title clipping — bslib defaults cropped the first row of text.
-     Force more line-height + a touch of top padding so 'Mean mobility, 2024'
-     etc. render fully. */
-  .bslib-value-box .value-box-area, .bslib-value-box .value-box-title {
-    padding-top: 0.35rem; line-height: 1.2;
+  /* KPI value boxes — bigger numbers, bigger box, no clipped titles. */
+  .bslib-value-box {
+    min-height: 132px !important;
+    border-radius: 12px;
   }
-  .bslib-value-box .value-box-title { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.92; }
-  .bslib-value-box .value-box-value { font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; }
-  .bslib-value-box .value-box-showcase { padding-left: 0.75rem; padding-right: 0.5rem; }
+  .bslib-value-box .value-box-area {
+    padding: 0.85rem 0.95rem !important;
+    line-height: 1.2;
+    justify-content: center;
+  }
+  .bslib-value-box .value-box-title {
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.92;
+    margin-bottom: 0.4rem;
+    white-space: normal;
+  }
+  .bslib-value-box .value-box-value {
+    font-size: 2.6rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+  .bslib-value-box .value-box-showcase { padding-left: 1rem; padding-right: 0.5rem; }
+  .bslib-value-box .value-box-showcase i, .bslib-value-box .value-box-showcase svg {
+    font-size: 2.4rem;
+    width: 2.4rem; height: 2.4rem;
+  }
+
+  /* Force the choropleth container to its declared height and stretch leaflet
+     to fill it — without this, the card body can collapse the iframe to a
+     fraction of the requested 720 px. */
+  .map-card { min-height: 760px; }
+  .map-card .card-body { padding: 0 !important; height: 720px; }
+  .map-card .leaflet-container { height: 720px !important; width: 100% !important; }
 
   /* Verdict pill on the Statistical evidence strip. */
   .verdict-dot { display: inline-block; width: 8px; height: 8px;
@@ -298,9 +325,9 @@ ui <- page_navbar(
     layout_columns(
       col_widths = c(9, 3),
       card(
-        full_screen = TRUE,
+        class = "map-card",
         card_header(textOutput("map_title", inline = TRUE)),
-        leafletOutput("map_choropleth", height = 720)
+        leafletOutput("map_choropleth", height = "720px")
       ),
       div(
         card(
