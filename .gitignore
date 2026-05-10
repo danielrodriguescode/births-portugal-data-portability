@@ -18,20 +18,8 @@ outputs/figures/*
 outputs/tables/*
 !outputs/tables/.gitkeep
 
-# Local-only deliverables — the rendered paper (PDF) and oral-defense
-# presentation (PPTX) are produced and kept locally in deliverables/
-# but are NOT committed to the public repo, by project policy.
+# Local-only working folder — never commit.
 deliverables/
-
-# Source files for the paper / slides are likewise not part of the
-# public repo — if regenerated locally, keep them out of git.
-paper/paper.Rmd
-paper/references.bib
-paper/paper.html
-paper/paper.pdf
-paper/*_files/
-paper/*_cache/
-presentation/
 
 # Office lock files
 **/~$*

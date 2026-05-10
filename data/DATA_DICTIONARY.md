@@ -112,4 +112,4 @@ where **HospitalDeliveries** comes from Transparência SNS (place of delivery, h
 
 ## Analysis strategy summary
 
-For each ULS in each year, directly compare hospital-side deliveries (SNS) and residence-side births (PORDATA aggregated to ULS). The difference is the mobility metric — no capacity proxy, no redistribution. Inferential tests H1–H4. Full method in `paper/paper.Rmd` § Methods and `R/03_analyse.R`.
+For each ULS in each year, directly compare hospital-side deliveries (SNS) and residence-side births (PORDATA aggregated to ULS). The difference is the mobility metric — no capacity proxy, no redistribution. Inferential tests H1–H4. Full method in `R/03_analyse.R`.

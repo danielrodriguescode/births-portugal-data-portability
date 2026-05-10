@@ -4,16 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project context
 
-This is **not a generic software project**. It is a research codebase for a PhD discipline assignment (Laboratory Project in Health Data Science) — the canonical project plan lives in [paper/PhD_Project_Plan_Births_Portugal.docx](paper/PhD_Project_Plan_Births_Portugal.docx) and the assignment brief in [paper/Health_Data_Science_Lab_Project_EN (1).pdf](paper/Health_Data_Science_Lab_Project_EN%20(1).pdf). Read the plan before making non-trivial changes — methodology, data sources, and deliverables are all fixed there.
+This is **not a generic software project**. It is a research codebase for a PhD discipline assignment (Laboratory Project in Health Data Science). The assignment brief and the original project plan are kept on the student's machine (outside the repo) and are not part of the public codebase.
 
 **Research question.** Quantify inter-regional obstetric patient flow in Portugal by cross-referencing PORDATA regional birth statistics against hospital-level deliveries from the Transparência SNS *Partos e Cesarianas* dataset, and use the result to argue for health data portability across SNS institutions.
 
-**Deliverables (all mandatory):**
+**What lives in this repository:**
 1. **R analytical pipeline** producing the ULS-level Mobility metric (see Methodology below).
 2. **Shiny application** deployable to shinyapps.io with seven tabs: Answer (headline + 4-test table), Map (ULS choropleth via `ulsportugal`), ULS Explorer (deliveries-vs-residents scatter), Heatmap (mobility ULS × year), PPP hospitals (separate panel for the four PPPs excluded from H1–H4), Methods (plain language), Data (source attribution & links).
-3. **Academic paper** (IMRaD) targeting JAMIA / IJMI / Acta Médica Portuguesa — kept locally as `deliverables/paper.pdf`. **Not committed to the GitHub repo** by project policy; the public repo carries the pipeline, not the manuscript.
-4. **Oral defense presentation** (5 content slides for the 10-min defense) — kept locally as `deliverables/slides.pptx`. **Not committed to the GitHub repo** for the same reason.
-5. **GitHub repo** with README, [prompts.md](prompts.md) (LLM interactions, mandated by the course), data download instructions, and reproducibility notes.
+3. **README, [prompts.md](prompts.md) (LLM interactions, mandated by the course), data dictionary, and reproducibility notes.**
 
 The assignment grading is: research question 10% / data acquisition & processing 20% / statistical analysis 25% / dashboard 20% / GitHub & reproducibility 15% / oral defense 10%. Optimise for **statistical depth and reproducibility**, not feature breadth.
 
@@ -27,7 +25,6 @@ R only. Do not introduce Python — the assignment allows it but the project pla
 | I/O | `readr`, `readxl` |
 | Spatial | `sf`, `leaflet`, [`ulsportugal`](https://github.com/danielrodriguescode/ulsportugal) |
 | Modelling | `lme4`, `lmerTest` (Satterthwaite p-values), `spdep` (Moran's I), `broom`, `broom.mixed` |
-| Reporting | `knitr`, `rmarkdown` (used only for ad-hoc local rendering — paper/slides live in `deliverables/`, not the repo) |
 | App | `shiny`, `bslib`, `plotly`, `DT` |
 
 `ulsportugal` is a GitHub-only own package that returns sf geometries for the 39 ULS in mainland Portugal — installed via `remotes::install_github` inside [R/00_setup.R](R/00_setup.R). It replaces the original plan's NUTS shapefile fetch because ULS catchment areas are the actual policy-relevant unit for analyses of Portuguese health-care delivery.
@@ -49,27 +46,18 @@ R only. Do not introduce Python — the assignment allows it but the project pla
 │   ├── region_crosswalk.R  # NUTS 2024 ↔ Região de Saúde mapping + URBAN_TERTIARY_ULS
 │   └── sync_shiny_data.R   # Copy data/processed/ + headline.csv → shiny/data/
 ├── shiny/
-│   ├── app.R                # Single-file Shiny entry point (six tabs)
+│   ├── app.R                # Single-file Shiny entry point (seven tabs)
 │   └── data/                # Bundle (gitignored) — refilled by sync_shiny_data
 ├── deploy_app.R             # Sync + rsconnect::deployApp("shiny")
 ├── outputs/
 │   ├── figures/             # PNG figures (gitignored, regenerable)
 │   └── tables/              # headline.csv (gitignored, regenerable)
-├── paper/
-│   └── *.{docx,pdf}         # Reference material only: assignment brief +
-│                            # PhD project plan. Manuscript is NOT here —
-│                            # see deliverables/paper.pdf (local-only).
-├── deliverables/            # LOCAL-ONLY, gitignored. Holds:
-│   ├── paper.pdf            #   - IMRaD manuscript (rendered)
-│   └── slides.pptx          #   - 10-min oral-defense PPTX deck
 ├── run_all.R                # Master orchestrator (sources 00→04 + sync_shiny_data)
 ├── RESULTS.md               # Plain-language executive summary of findings
 ├── prompts.md               # MANDATORY: every LLM prompt + critical comment
 ├── data/DATA_DICTIONARY.md  # Source, variables, time period, study population
 └── README.md
 ```
-
-The paper and presentation are **not part of the GitHub repository** by project policy. They are produced and kept locally in `deliverables/` as a PDF (paper) and a PPTX (slides). When numerical findings change in `RESULTS.md`, regenerate both deliverables — but never commit them.
 
 `run_all.R` must remain runnable end-to-end from raw data; if a step needs new dependencies or new raw files, update both the script and this file.
 
@@ -98,8 +86,6 @@ Rscript -e "shiny::runApp('shiny', launch.browser = TRUE)"
 Rscript deploy_app.R
 ```
 
-The paper PDF and the slides PPTX in `deliverables/` are not built by `run_all.R`; they are local-only artefacts and are not part of the GitHub repo.
-
 ### Shiny self-containment contract
 
 `shiny/app.R` reads ONLY from `shiny/data/` using paths **relative to the app directory** — never `here::here()`. shinyapps.io has no project-root marker, so `here()` resolves unpredictably there; that is the failure mode that produced the *"Unable to connect to worker after 60.00 seconds"* error in deployment. `shiny/data/` is rebuilt every time `run_all.R` finishes (via `sync_shiny_data()`) and again every time `deploy_app.R` runs, so a removed pipeline output never silently lingers in the deploy. `shiny/data/` is gitignored — never edit by hand, never commit.
@@ -122,7 +108,7 @@ The pipeline is **strictly sequential and idempotent**. Each numbered script in 
 4. **`03_analyse.R`** — compute, per `(uls, year)`:
    `Mobility = HospitalDeliveries(uls, year) − ResidentBirths(uls, year)`
    No capacity proxy, no redistribution. PORDATA is aggregated to ULS via the concelho→ULS dictionary in `ulsportugal` (3 split concelhos — Lisboa, Loures, Porto — allocated proportionally to freguesia counts). Apply Unicode NFC normalisation (`stringi::stri_trans_nfc`) on every join key — without it the SNS data (composed `ã`) silently fails to match the crosswalk source-file (decomposed). Run H1 (one-sample t-test on per-ULS means, n=39 — no IID violation), H2 (Wilcoxon urban tertiary vs other), H3 (lmer with `lmerTest`-derived Satterthwaite p-values), H4 (Moran's I, k=5 NN on ULS polygon centroids). Output `mobility_panel.rds`, `models.rds`, `outputs/tables/headline.csv`, `outputs/tables/ppp_panel.csv`.
-5. **`04_visualise.R`** — generate every static figure into `outputs/figures/` for use by the dashboard and the locally-rendered paper PDF. Currently 9 figures (`fig01_deliveries_top10_uls`, `fig02_caesarean_rate_national`, `fig03_mobility_by_uls`, `fig04_deliveries_vs_residents`, `fig05_mobility_heatmap`, `fig06_mobility_choropleth`, `fig07a_lmer_resid_vs_fitted`, `fig07b_lmer_qq`, `fig08_h2_urban_vs_peripheral`).
+5. **`04_visualise.R`** — generate every static figure into `outputs/figures/` for use by the dashboard. Currently 9 figures (`fig01_deliveries_top10_uls`, `fig02_caesarean_rate_national`, `fig03_mobility_by_uls`, `fig04_deliveries_vs_residents`, `fig05_mobility_heatmap`, `fig06_mobility_choropleth`, `fig07a_lmer_resid_vs_fitted`, `fig07b_lmer_qq`, `fig08_h2_urban_vs_peripheral`).
 6. **`R/sync_shiny_data.R`** — copies the five required `.rds` panels and `outputs/tables/headline.csv` into `shiny/data/`. Sourced by `run_all.R` at the very end so a fresh pipeline run leaves the Shiny bundle ready for both local launch and `deploy_app.R`.
 
 The Shiny app reads ONLY from `shiny/data/` — it does not re-run the pipeline and does not reach back into `data/processed/`. If app data looks stale, run `run_all.R` (or `DRY_RUN=TRUE Rscript deploy_app.R` to refresh just the bundle).
@@ -149,10 +135,9 @@ Unit of analysis: 39 mainland ULS (PPPs reported separately, not in tests).
 
 ## LLM-use protocol (assignment requirement)
 
-Every meaningful prompt-and-response with an LLM (including conversations with Claude) **must** be logged to [prompts.md](prompts.md) along with a short critical comment from the student. This is graded under "scientific quality of the research question" (10%) and "evaluation criteria — critical thinking about the LLM". When you make a substantive recommendation that ends up in the codebase or the paper, remind the user to capture the exchange in `prompts.md`.
+Every meaningful prompt-and-response with an LLM (including conversations with Claude) **must** be logged to [prompts.md](prompts.md) along with a short critical comment from the student. This is graded under "scientific quality of the research question" (10%) and "evaluation criteria — critical thinking about the LLM". When you make a substantive recommendation that ends up in the codebase, remind the user to capture the exchange in `prompts.md`.
 
 ## What "done" looks like for a task
 
 - **Pipeline change:** `Rscript run_all.R` runs clean from a fresh `data/processed/` directory and ends with `shiny/data/` repopulated.
 - **Shiny change:** app starts via `shiny::runApp('shiny')` with no `here::here()` calls inside `shiny/`, all seven tabs render, no console warnings about reactive invalidation, the choropleth and heatmap are interactive. Deploy verified via `Rscript deploy_app.R` — worker boots within shinyapps.io's 60-second window.
-- **Paper / slides change:** `deliverables/paper.pdf` and `deliverables/slides.pptx` are regenerated locally; every numerical claim in either matches a value in `outputs/tables/headline.csv` or `RESULTS.md`. Neither artefact is committed to the GitHub repo.

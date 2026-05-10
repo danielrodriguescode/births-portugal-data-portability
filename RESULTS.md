@@ -81,7 +81,7 @@ The previous draft used a capacity-weighted *expected* formula (Observed − Tot
 - **PPP hospitals (Cascais, Loures, Braga, Vila Franca de Xira)** are excluded from the main analysis (B-i decision). They are SNS-funded but operationally separate and have no defined ULS catchment in `ulsportugal`. Their hospital-level deliveries are reported in [outputs/tables/ppp_panel.csv](outputs/tables/ppp_panel.csv) and on the dashboard's "PPP hospitals" tab.
 - **3 split concelhos (Lisboa, Loures, Porto)** allocated proportionally to freguesia count per ULS — better would be freguesia-level population weights (not currently in the project).
 - **Hospital identity drift (CHU → ULS rename in 2024)** is resolved by spatial point-in-polygon for hospitals not exactly named after a ULS; the 2 hospitals with imprecise lat/lng (Amadora/Sintra and Santa Maria, both reported as longitude −9.0) are matched by direct ULS name match.
-- **ULS Barcelos/Esposende** has 0 SNS deliveries because it does not operate a maternity service — its residents are referred to ULS Braga. This is correctly captured as 100 % outflow but should be flagged in the paper.
+- **ULS Barcelos/Esposende** has 0 SNS deliveries because it does not operate a maternity service — its residents are referred to ULS Braga. This is correctly captured as 100 % outflow but is a structural-coverage caveat, not a measurement effect.
 - **No risk adjustment** — high-risk pregnancies are referred to academic centres (ULS Coimbra, ULS Santa Maria, ULS São João) for clinical reasons. That's "legitimate" mobility that wouldn't be solved by data portability.
 
 ## Policy implication
