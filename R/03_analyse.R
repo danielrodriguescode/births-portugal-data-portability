@@ -108,6 +108,22 @@ uls_means_ordered <- uls_map |>
 
 h4 <- moran.test(uls_means_ordered$mean_mobility, lw)
 
+# Moran scatterplot coordinates (standardised x vs spatially-lagged x). Bundled
+# into models.rds so the Shiny app can plot H4 without depending on spdep.
+moran_x  <- as.numeric(scale(uls_means_ordered$mean_mobility))
+moran_y  <- as.numeric(spdep::lag.listw(lw, moran_x))
+moran_scatter <- tibble::tibble(
+  unit_id = uls_means_ordered$NOME_ULS,
+  x       = moran_x,
+  y       = moran_y,
+  quadrant = dplyr::case_when(
+    x >= 0 & y >= 0 ~ "high-high",
+    x <  0 & y <  0 ~ "low-low",
+    x >= 0 & y <  0 ~ "high-low",
+    TRUE            ~ "low-high"
+  )
+)
+
 # ---- 6. Persist models + diagnostics ---------------------------------------
 diag_df <- tibble::tibble(
   fitted     = fitted(m_lmer),
@@ -116,7 +132,8 @@ diag_df <- tibble::tibble(
 )
 
 saveRDS(list(h1 = h1, h2 = h2, lmer = m_lmer, lmer_tidy = lmer_tidy,
-             h4 = h4, diag = diag_df, uls_means = uls_means,
+             h4 = h4, moran_scatter = moran_scatter,
+             diag = diag_df, uls_means = uls_means,
              ppp_panel = ppp_panel),
         file.path(proc_dir, "models.rds"))
 

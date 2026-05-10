@@ -213,6 +213,24 @@ custom_css <- "
   /* Lede block — keep it tight, no overlap with the explainer. */
   .lede-block { display: flex; flex-direction: column; gap: 0.85rem; max-width: 78ch; }
   .legend-tip { font-size: 0.72rem; color: #6B7280; margin-top: 4px; }
+
+  /* Hypotheses tab — typography for the question / test / outcome blocks. */
+  .hyp-q, .hyp-test, .hyp-out { margin-bottom: 0.55rem; line-height: 1.5; color: #1F2937; font-size: 0.92rem; }
+  .hyp-test { color: #334155; }
+  .hyp-q strong, .hyp-test strong, .hyp-out strong { color: #0F172A; font-weight: 600; }
+  .hyp-test em { color: #0F4C81; font-style: normal; font-weight: 600; }
+  .hyp-out {
+    background: #F8FAFC; border-radius: 8px; padding: 0.55rem 0.85rem;
+    font-variant-numeric: tabular-nums; font-size: 0.9rem;
+    border-left: 3px solid #E5E7EB;
+  }
+  .hyp-out.reject { border-left-color: #10B981; }
+  .hyp-out.ns     { border-left-color: #9CA3AF; }
+  .verdict-pill { display: inline-block; padding: 1px 8px; border-radius: 999px;
+                   font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;
+                   font-weight: 700; margin-left: 0.5rem; vertical-align: middle; }
+  .verdict-reject { background: #ECFDF5; color: #065F46; }
+  .verdict-ns     { background: #F3F4F6; color: #6B7280; }
 "
 
 # ---- UI helpers ------------------------------------------------------------
@@ -379,7 +397,87 @@ ui <- page_navbar(
     )
   ),
 
-  # ---- Tab 4: SOURCES ------------------------------------------------------
+  # ---- Tab 4: HYPOTHESES ---------------------------------------------------
+  nav_panel(
+    "Hypotheses",
+
+    div(class = "lede-block",
+      p(class = "lede",
+        HTML("Four pre-registered hypotheses, one statistical test each — chosen to match what the data can and cannot say.")),
+      p(class = "why",
+        "Unit of analysis: the 39 mainland ULS (PPPs reported separately). Each test is run on the per-ULS mean over 2014-2024 unless stated otherwise.")
+    ),
+
+    layout_columns(
+      col_widths = c(6, 6),
+
+      # H1 ---------------------------------------------------------------
+      card(
+        card_header(uiOutput("h1_header")),
+        div(style = "padding: 0.4rem 1.1rem 0.6rem 1.1rem;",
+            tags$div(class = "hyp-q",
+                     tags$strong("Question. "),
+                     "Are Portuguese ULS in balance, on average — does the typical ULS deliver as many babies as it has resident births?"),
+            tags$div(class = "hyp-test",
+                     tags$strong("Test. "),
+                     "One-sample t-test on the 39 per-ULS mean mobility values against the null mean 0. ",
+                     tags$em("Why this one: "), "collapsing to one number per ULS gives 39 IID observations; the panel itself is autocorrelated and would violate the t-test's assumptions."),
+            tags$div(class = "hyp-out",
+                     uiOutput("h1_result")),
+            plotlyOutput("plot_h1", height = 260))
+      ),
+
+      # H2 ---------------------------------------------------------------
+      card(
+        card_header(uiOutput("h2_header")),
+        div(style = "padding: 0.4rem 1.1rem 0.6rem 1.1rem;",
+            tags$div(class = "hyp-q",
+                     tags$strong("Question. "),
+                     "Do the 6 urban tertiary ULS (Santa Maria, São José, Lisboa Ocidental, São João, Santo António, Coimbra) absorb more deliveries than the 33 peripheral ULS?"),
+            tags$div(class = "hyp-test",
+                     tags$strong("Test. "),
+                     "Wilcoxon rank-sum on per-ULS mean mobility, urban tertiary vs peripheral. ",
+                     tags$em("Why this one: "), "Wilcoxon makes no normality assumption and is robust to the heavy tails the mobility distribution has — n = 6 vs 33 is too small for a t-test."),
+            tags$div(class = "hyp-out",
+                     uiOutput("h2_result")),
+            plotlyOutput("plot_h2", height = 260))
+      ),
+
+      # H3 ---------------------------------------------------------------
+      card(
+        card_header(uiOutput("h3_header")),
+        div(style = "padding: 0.4rem 1.1rem 0.6rem 1.1rem;",
+            tags$div(class = "hyp-q",
+                     tags$strong("Question. "),
+                     "Is the mismatch between residents and SNS deliveries widening over the decade?"),
+            tags$div(class = "hyp-test",
+                     tags$strong("Test. "),
+                     "Linear mixed-effects model: ", tags$code("lmer(mobility ~ year + (1 | uls))"), ", with lmerTest's Satterthwaite df for the year coefficient. ",
+                     tags$em("Why this one: "), "the random intercept on ULS absorbs huge level differences (Coimbra +2,213/yr vs Amadora-Sintra -3,280/yr) so the year effect is identified from the within-ULS time signal, not between-ULS variation."),
+            tags$div(class = "hyp-out",
+                     uiOutput("h3_result")),
+            plotlyOutput("plot_h3", height = 260))
+      ),
+
+      # H4 ---------------------------------------------------------------
+      card(
+        card_header(uiOutput("h4_header")),
+        div(style = "padding: 0.4rem 1.1rem 0.6rem 1.1rem;",
+            tags$div(class = "hyp-q",
+                     tags$strong("Question. "),
+                     "Are magnets and exporters scattered randomly across Portugal, or do they cluster — neighbours behaving like neighbours?"),
+            tags$div(class = "hyp-test",
+                     tags$strong("Test. "),
+                     "Moran's I on the 39 ULS-level mean mobility values, with a k = 5 nearest-neighbour spatial weights matrix on ULS polygon centroids. ",
+                     tags$em("Why this one: "), "Moran's I is the standard global test for spatial autocorrelation; k = 5 NN avoids the boundary issues of contiguity-based weights when ULS polygons are very irregular in size."),
+            tags$div(class = "hyp-out",
+                     uiOutput("h4_result")),
+            plotlyOutput("plot_h4", height = 260))
+      )
+    )
+  ),
+
+  # ---- Tab 5: SOURCES ------------------------------------------------------
   nav_panel(
     "Sources",
     layout_columns(
@@ -653,6 +751,194 @@ server <- function(input, output, session) {
       arrange(Hospital, Year) |>
       datatable(rownames = FALSE,
                 options = list(pageLength = 8, dom = "tip"))
+  })
+
+  # =====================================================================
+  # Hypotheses tab — UI helpers + plots
+  # =====================================================================
+  verdict_pill <- function(p) {
+    ok <- !is.na(p) && p < 0.05
+    cls <- if (ok) "verdict-pill verdict-reject" else "verdict-pill verdict-ns"
+    tag <- if (ok) "Reject H₀" else "n.s."
+    tags$span(class = cls, tag)
+  }
+  hyp_outcome_class <- function(p) {
+    if (!is.na(p) && p < 0.05) "hyp-out reject" else "hyp-out ns"
+  }
+  hyp_header <- function(label, p) {
+    tagList(span(label), verdict_pill(p))
+  }
+
+  # ---- H1 -----------------------------------------------------------------
+  output$h1_header <- renderUI({
+    hyp_header("H1 · Mean ULS mobility ≠ 0",
+               as.numeric(headline["h1_p"]))
+  })
+  output$h1_result <- renderUI({
+    p_val <- as.numeric(headline["h1_p"])
+    div(class = hyp_outcome_class(p_val),
+        tags$strong("Result. "),
+        sprintf("t = %s (df 38) · p = %s · mean = %s deliv./yr · 95%% CI %s. ",
+                headline["h1_t"], headline["h1_p"],
+                headline["h1_estimate"], headline["h1_ci"]),
+        if (!is.na(p_val) && p_val < 0.05)
+          tags$em("Most ULS are net exporters; the gap is real.") else
+          tags$em("Cannot reject the null."))
+  })
+  output$plot_h1 <- renderPlotly({
+    df <- models$uls_means |>
+      left_join(uls_short, by = c("unit_id" = "NOME_ULS")) |>
+      mutate(NOME_PRETTY = uls_short_name(unit_id)) |>
+      arrange(mean_mobility) |>
+      mutate(NOME_PRETTY = factor(NOME_PRETTY, levels = NOME_PRETTY))
+    mean_val <- as.numeric(headline["h1_estimate"])
+    ci_lo <- models$h1$conf.int[1]
+    ci_hi <- models$h1$conf.int[2]
+    p <- ggplot(df, aes(x = mean_mobility, y = NOME_PRETTY,
+                        text = sprintf("%s<br>Mean mobility: %s",
+                                       NOME_PRETTY, fmt_signed(mean_mobility)))) +
+      annotate("rect", xmin = ci_lo, xmax = ci_hi,
+               ymin = -Inf, ymax = Inf, fill = ACCENT, alpha = 0.08) +
+      geom_vline(xintercept = 0, colour = "#9CA3AF", linetype = "dashed") +
+      geom_vline(xintercept = mean_val, colour = ACCENT, linewidth = 0.8) +
+      geom_point(aes(colour = mean_mobility), size = 2.4) +
+      scale_colour_gradient2(low = EXPORT, mid = NEUTRAL, high = IMPORT,
+                             midpoint = 0, guide = "none") +
+      scale_x_continuous(labels = comma) +
+      labs(x = "Mean mobility (deliveries / yr)", y = NULL,
+           subtitle = sprintf("Vertical line: sample mean (%s). Shaded band: 95%% CI %s.",
+                              fmt_signed(mean_val), headline["h1_ci"])) +
+      theme_minimal(base_family = "Inter") +
+      theme(panel.grid.minor = element_blank(),
+            axis.text.y = element_text(size = 7, colour = "#374151"),
+            plot.subtitle = element_text(size = 9, colour = "#6B7280"))
+    ggplotly(p, tooltip = "text") |> config(displayModeBar = FALSE)
+  })
+
+  # ---- H2 -----------------------------------------------------------------
+  output$h2_header <- renderUI({
+    hyp_header("H2 · Urban tertiary > peripheral",
+               as.numeric(headline["h2_p"]))
+  })
+  output$h2_result <- renderUI({
+    p_val <- as.numeric(headline["h2_p"])
+    div(class = hyp_outcome_class(p_val),
+        tags$strong("Result. "),
+        sprintf("W = %s · p = %s · 95%% CI %s. ",
+                headline["h2_W"], headline["h2_p"], headline["h2_diff_ci"]),
+        if (p_val < 0.05) tags$em("Group difference detected.") else
+          tags$em("The label is not predictive — Coimbra is the country's biggest magnet, while Lisboa Ocidental is among its biggest exporters."))
+  })
+  output$plot_h2 <- renderPlotly({
+    df <- models$uls_means |>
+      mutate(group = ifelse(urban_tertiary, "Urban tertiary", "Peripheral"),
+             NOME_PRETTY = uls_short_name(unit_id))
+    p <- ggplot(df, aes(x = group, y = mean_mobility,
+                        text = sprintf("%s<br>%s<br>Mean mobility: %s",
+                                       NOME_PRETTY, group, fmt_signed(mean_mobility)))) +
+      geom_hline(yintercept = 0, colour = "#9CA3AF", linetype = "dashed") +
+      geom_boxplot(aes(group = group), width = 0.45,
+                   fill = "#F1F5F9", colour = "#94A3B8",
+                   outlier.shape = NA) +
+      geom_jitter(aes(colour = mean_mobility), width = 0.12, size = 2.6,
+                  alpha = 0.92) +
+      scale_colour_gradient2(low = EXPORT, mid = NEUTRAL, high = IMPORT,
+                             midpoint = 0, guide = "none") +
+      scale_y_continuous(labels = comma) +
+      labs(x = NULL, y = "Mean mobility (deliveries / yr)") +
+      theme_minimal(base_family = "Inter") +
+      theme(panel.grid.minor = element_blank(),
+            axis.text = element_text(colour = "#374151"))
+    ggplotly(p, tooltip = "text") |> config(displayModeBar = FALSE)
+  })
+
+  # ---- H3 -----------------------------------------------------------------
+  output$h3_header <- renderUI({
+    hyp_header("H3 · Mobility drifts over time",
+               as.numeric(headline["h3_year_p"]))
+  })
+  output$h3_result <- renderUI({
+    p_val <- as.numeric(headline["h3_year_p"])
+    div(class = hyp_outcome_class(p_val),
+        tags$strong("Result. "),
+        sprintf("β = %s deliveries/ULS/yr · 95%% CI %s · p = %s. ",
+                headline["h3_year_coef"], headline["h3_year_ci"],
+                headline["h3_year_p"]),
+        if (p_val < 0.05) tags$em("Each year, the average ULS loses ~7.5 more deliveries than the year before — the gap is widening.") else
+          tags$em("No detectable trend."))
+  })
+  output$plot_h3 <- renderPlotly({
+    yearly <- mobility |>
+      group_by(year) |>
+      summarise(mean_mobility = mean(mobility, na.rm = TRUE), .groups = "drop")
+    p <- ggplot(mobility, aes(year, mobility)) +
+      geom_hline(yintercept = 0, colour = "#9CA3AF", linetype = "dashed") +
+      geom_jitter(aes(text = sprintf("%s — %d<br>Mobility: %s",
+                                      uls_short_name(unit_id), year,
+                                      fmt_signed(mobility))),
+                  width = 0.18, height = 0, size = 1.4,
+                  colour = "#CBD5E1", alpha = 0.65) +
+      geom_smooth(data = yearly,
+                  mapping = aes(year, mean_mobility),
+                  method = "lm", se = TRUE,
+                  colour = ACCENT, fill = "#DBEAFE",
+                  linewidth = 0.9, inherit.aes = FALSE) +
+      geom_point(data = yearly,
+                 mapping = aes(year, mean_mobility,
+                               text = sprintf("%d national mean<br>%s",
+                                              year, fmt_signed(mean_mobility))),
+                 colour = ACCENT, size = 3, inherit.aes = FALSE) +
+      scale_y_continuous(labels = comma) +
+      labs(x = NULL, y = "Mobility (deliveries / yr)",
+           subtitle = sprintf("Blue line: lmer year coefficient β = %s/yr (p = %s). Grey points = ULS-year observations.",
+                              headline["h3_year_coef"], headline["h3_year_p"])) +
+      theme_minimal(base_family = "Inter") +
+      theme(panel.grid.minor = element_blank(),
+            plot.subtitle = element_text(size = 9, colour = "#6B7280",
+                                          margin = margin(b = 4)))
+    ggplotly(p, tooltip = "text") |> config(displayModeBar = FALSE)
+  })
+
+  # ---- H4 -----------------------------------------------------------------
+  output$h4_header <- renderUI({
+    hyp_header("H4 · Spatial clustering (Moran's I)",
+               as.numeric(headline["h4_moran_p"]))
+  })
+  output$h4_result <- renderUI({
+    p_val <- as.numeric(headline["h4_moran_p"])
+    div(class = hyp_outcome_class(p_val),
+        tags$strong("Result. "),
+        sprintf("I = %s · p = %s. ",
+                headline["h4_moran_I"], headline["h4_moran_p"]),
+        if (p_val < 0.05) tags$em("Modest but significant — magnets cluster (Porto-Braga-Matosinhos corridor) and so do exporters (the Lisbon ring).") else
+          tags$em("Spatial pattern not distinguishable from random."))
+  })
+  output$plot_h4 <- renderPlotly({
+    df <- models$moran_scatter |>
+      mutate(NOME_PRETTY = uls_short_name(unit_id))
+    slope <- as.numeric(headline["h4_moran_I"])
+    p <- ggplot(df, aes(x, y,
+                        text = sprintf("%s<br>Standardised mobility: %.2f<br>Neighbour mean: %.2f<br>Quadrant: %s",
+                                       NOME_PRETTY, x, y, quadrant))) +
+      geom_hline(yintercept = 0, colour = "#9CA3AF", linetype = "dashed") +
+      geom_vline(xintercept = 0, colour = "#9CA3AF", linetype = "dashed") +
+      geom_abline(slope = slope, intercept = 0,
+                  colour = ACCENT, linewidth = 0.9) +
+      geom_point(aes(colour = quadrant), size = 2.6, alpha = 0.92) +
+      scale_colour_manual(values = c("high-high" = IMPORT,
+                                       "low-low"   = EXPORT,
+                                       "high-low"  = "#94A3B8",
+                                       "low-high"  = "#94A3B8"),
+                          name = "Quadrant") +
+      labs(x = "Mobility (z-score)",
+           y = "Mean of 5 nearest neighbours (z-score)",
+           subtitle = sprintf("Slope of the blue line is Moran's I = %s. High-high + low-low quadrants = positive autocorrelation.",
+                              headline["h4_moran_I"])) +
+      theme_minimal(base_family = "Inter") +
+      theme(panel.grid.minor = element_blank(),
+            plot.subtitle = element_text(size = 9, colour = "#6B7280",
+                                          margin = margin(b = 4)))
+    ggplotly(p, tooltip = "text") |> config(displayModeBar = FALSE)
   })
 }
 
