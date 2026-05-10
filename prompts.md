@@ -150,3 +150,41 @@ The fix Claude proposed and implemented:
 2. **Self-containment has to be enforced by tooling, not by goodwill.** `deploy_app.R` rebuilding `shiny/data/` from scratch each time means a removed pipeline output (or a stale dev artefact) cannot silently survive into production. The `appName = "births-portugal"` and `forceUpdate = TRUE` are explicit so we never accidentally deploy under a different name.
 
 The previous "deploy" instruction (`rsconnect::deployApp("shiny", appName = "births-portugal")`) was technically syntactically correct but produced a broken app — a useful reminder that "the command runs" is not the same as "the deliverable works".
+
+---
+
+### 2026-05-10 — Dashboard redesign: 4 tabs, year filter, unified palette
+
+**Prompt:** "the app is horrible honestly, I dont need to put the methods, less verbose, more beautiful UI, the contrasts are all mixed. please apply design best practices to it"
+
+**Response (summary):** Claude audited the existing seven-tab dashboard and rewrote it from scratch as four tabs — Overview / By ULS / Over time / Sources — collapsing the Methods (plain language), PPP, and Data tabs that the user identified as paper-style content rather than dashboard content. The redesign:
+
+- A lede on Overview that frames the question + why it matters (`"Do mothers in Portugal deliver in their own region?"` → headline → portable health records argument).
+- Four KPI value boxes (`bsicons` glyphs): ULS analysed, Net importers %, Mean mobility, Period.
+- A **year selector** (mean of all years, or any single 2014--2024 year) that drives the KPIs, the choropleth, and the top-5 importer/exporter ranks — fixing the previous "static mean only" limitation the user complained about.
+- An inline `What is mobility?` explainer on Overview because the metric was not self-evident to a first-time visitor.
+- Unified design system: `bs_theme(version = 5)`, Inter via Google Fonts, off-white `#FAFBFC` page bg, white cards with hairline `#E5E7EB` borders, `#0F4C81` accent, single diverging mobility palette `#B2182B → #F2F2F2 → #1A5276` used everywhere mobility appears (choropleth, scatter, heatmap, ranks, table). `tabular-nums` on every figure.
+- New `Ratio` column on the By-ULS table with the `+87% / -55%` surplus framing — `mobility_ratio` was computed in the panel but never surfaced.
+- Choropleth fixes: `CartoDB.PositronNoLabels` base, `fillOpacity = 0.78`, white `0.6px` borders, accent-blue hover, `Inter`-styled tooltip.
+- Bug fix: `R/03_analyse.R` was writing `year_range` with an en-dash (U+2013) which the C-locale CSV writer turned into the literal text `<e2><80><93>`. Switched to plain hyphen and made the app derive the period directly from `mobility_panel` rather than trusting the CSV string.
+- Adds `bsicons` as an app dependency.
+
+**Critical comment:** The user's feedback was substantively correct on three counts and Claude was wrong on each before being told:
+
+1. **The Methods tab was paper material, not dashboard material.** Putting H1--H4 hypotheses + statistical text + caveats into a dashboard is a category error. The dashboard reader wants a one-paragraph answer + interactive geography + a year filter; the methodology belongs in the paper. The prior CLAUDE.md spec listed the Methods tab as a deliverable, which encoded this category error from the start. Removing it shrunk the cognitive load without losing information.
+2. **Three palettes for related quantities is bad data design.** The pre-redesign app used a diverging red-white-blue for mobility, `YlOrRd` for raw deliveries/residents, and a third red-white-blue with a *different* blue (`#2166ac` vs `#1A5276`) for the heatmap. This breaks the eyes' ability to anchor on a single visual encoding and is exactly the "contrasts are all mixed" the user complained about. Single diverging palette + single sequential palette is the textbook fix.
+3. **A static mean buries the time signal.** The previous Overview only showed mean mobility across all years; the most interesting question (which 2014--2024 year is Coimbra at peak inflow? when does Amadora/Sintra's deficit widen?) was unanswerable from the dashboard. Adding the year selector turns Overview from a static infographic into an actual exploration tool.
+
+The most useful general lesson is that **the prior CLAUDE.md spec was the bug** — the LLM optimised for the spec rather than for what makes a good dashboard, and it took the user explicitly saying "the app is horrible" to override the spec. This is a recurring theme with this project (the same thing happened earlier with the capacity-weighted Expected formula). Lesson: when the spec and the desired outcome conflict, override the spec, then update the spec.
+
+---
+
+### 2026-05-10 — Vector-context error in Shiny formatters
+
+**Prompt:** "it's shit" + screenshots showing red error banners on the choropleth, scatter, and table.
+
+**Response (summary):** Diagnosed that `fmt_signed` and `fmt_pct` had scalar `if (is.na(x)) return("—")` guards but were called inside `ggplot aes(text = sprintf(...))`, the leaflet label `sprintf`, and a `dplyr::transmute` for the `Ratio` column — all of which pass vectors. R 4.x errors on `if` with a length>1 condition, which Shiny surfaces as the generic "An error has occurred. Check your logs" red banner. Refactored both formatters to be fully vectorised via `ifelse()`, verified on real per-year (35-element) and mean-branch (39-element) vectors. Also added `ratio_to_surplus(r) = r - 1` so `mobility_ratio` (which is `deliveries / resident_births`, e.g. 1.87 for Coimbra) is displayed as the surplus/deficit percentage the user actually wants (+87% magnet / -55% exporter), not the raw retention share. Set `na.color` on the leaflet palette so missing-data ULS-years don't break the legend.
+
+**Critical comment:** Two embarrassing oversights here. First, I tested `fmt_int` (which used `ifelse`) but not `fmt_signed`/`fmt_pct` (which used `if`); they shared a docstring but not a contract, and the smoke test only exercised initialisation, not the reactive evaluation. Lesson: when writing helpers that will be called in both scalar and vector contexts, use `ifelse` from the start — there is no real cost — and the smoke test should evaluate at least one reactive end-to-end, not just the bootstrap. Second, I assumed `mobility_ratio` was the surplus/deficit percentage when in fact it was the retention share (`deliveries / resident_births`). Reading the panel data first instead of guessing the semantics from the column name would have caught this in 30 seconds; I had the data in the worktree the whole time. Both mistakes were bypassed by the user's blunt "it's shit" rather than caught by Claude. This is the same anti-pattern as the `here::here` failure — the code parsed and "worked" in the cheap test but failed on real input.
+
+The fix is now committed (28a9806) and tagged as `v1.0-dashboard` so this exact working state can be recovered by name.
