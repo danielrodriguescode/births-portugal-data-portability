@@ -138,7 +138,7 @@ headline <- tibble::tibble(
              as.character(sum(uls_means$urban_tertiary)),
              as.character(sum(!uls_means$urban_tertiary)),
              as.character(nrow(ppp_panel |> distinct(unit_id))),
-             paste(range(mobility_panel$year), collapse = "–"),
+             paste(range(mobility_panel$year), collapse = "-"),
              sprintf("%.1f", mean(uls_means$mean_mobility > 0) * 100),
              sprintf("%.1f", median(uls_means$mean_mobility)),
              sprintf("%.1f", IQR(uls_means$mean_mobility)),
