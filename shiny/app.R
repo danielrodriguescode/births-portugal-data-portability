@@ -74,19 +74,25 @@ headline <- if (file.exists(headline_path)) {
   readr::read_csv(headline_path, show_col_types = FALSE) |> tibble::deframe()
 } else c()
 
-# Format helpers (defined before any UI block that uses them).
-fmt_int <- function(x) ifelse(is.na(x), "—",
-                              formatC(round(x), format = "d", big.mark = ","))
+# Format helpers — fully vectorised so they work both inside scalar contexts
+# (renderText) and vector contexts (ggplot aes(text = sprintf(...))).
+fmt_int <- function(x) {
+  ifelse(is.na(x), "—",
+         formatC(round(x), format = "d", big.mark = ","))
+}
 fmt_signed <- function(x) {
-  if (is.na(x)) return("—")
-  sign <- ifelse(x >= 0, "+", "−")
-  paste0(sign, formatC(abs(round(x)), format = "d", big.mark = ","))
+  ifelse(is.na(x), "—",
+         paste0(ifelse(x >= 0, "+", "−"),
+                formatC(abs(round(x)), format = "d", big.mark = ",")))
 }
 fmt_pct <- function(x, digits = 1) {
-  if (is.na(x)) return("—")
-  sign <- ifelse(x >= 0, "+", "−")
-  paste0(sign, formatC(abs(x) * 100, format = "f", digits = digits), "%")
+  ifelse(is.na(x), "—",
+         paste0(ifelse(x >= 0, "+", "−"),
+                formatC(abs(x) * 100, format = "f", digits = digits), "%"))
 }
+# Convert mobility_ratio (deliveries / resident_births, e.g. 1.87 for Coimbra)
+# to a deficit/surplus percentage (+87% magnet, -55% exporter).
+ratio_to_surplus <- function(r) r - 1
 
 # ---- Theme + CSS -----------------------------------------------------------
 ACCENT  <- "#0F4C81"
@@ -150,7 +156,8 @@ custom_css <- "
 # ---- UI helpers ------------------------------------------------------------
 mobility_palette <- function(domain_abs) {
   colorNumeric(c(EXPORT, NEUTRAL, IMPORT),
-               domain = c(-domain_abs, domain_abs))
+               domain = c(-domain_abs, domain_abs),
+               na.color = "#E5E7EB")
 }
 
 rank_block <- function(df, value_col, css_class, n = 5) {
@@ -447,7 +454,7 @@ server <- function(input, output, session) {
     pal <- mobility_palette(domain_abs)
     df$mobility_ratio_pct <- if ("mobility_ratio" %in% names(df))
       ifelse(is.na(df$mobility_ratio), "",
-             sprintf(" (%s)", fmt_pct(df$mobility_ratio))) else ""
+             sprintf(" (%s)", fmt_pct(ratio_to_surplus(df$mobility_ratio)))) else ""
     label <- sprintf(
       "<div style='font-weight:600; color:#0F172A;'>%s</div>
        <div style='color:#374151;'>%s%s</div>",
@@ -483,7 +490,8 @@ server <- function(input, output, session) {
                           "%s<br>Deliveries: %s<br>Residents: %s<br>Mobility: %s (%s)",
                           NOME_CURTO,
                           fmt_int(deliveries), fmt_int(resident_births),
-                          fmt_signed(mobility), fmt_pct(mobility_ratio)))) +
+                          fmt_signed(mobility),
+                          fmt_pct(ratio_to_surplus(mobility_ratio))))) +
       geom_abline(slope = 1, intercept = 0, colour = "#9CA3AF",
                   linetype = "dashed") +
       geom_point(aes(colour = mobility), size = 3.2, alpha = 0.92) +
@@ -507,8 +515,7 @@ server <- function(input, output, session) {
                 Deliveries = round(deliveries),
                 `Resident births` = round(resident_births),
                 Mobility = round(mobility),
-                Ratio = ifelse(is.na(mobility_ratio), NA_character_,
-                               fmt_pct(mobility_ratio))) |>
+                Ratio = fmt_pct(ratio_to_surplus(mobility_ratio))) |>
       datatable(rownames = FALSE,
                 options = list(pageLength = 12, dom = "tip",
                                order = list(list(3, "asc"))))
