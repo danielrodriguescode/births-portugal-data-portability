@@ -168,34 +168,34 @@ custom_css <- "
                      font-size: 0.86rem; }
   table.dataTable { font-variant-numeric: tabular-nums; }
 
-  /* KPI value boxes — bigger numbers, bigger box, no clipped titles. */
+  /* KPI value boxes — moderate size, no clipping. */
   .bslib-value-box {
-    min-height: 132px !important;
-    border-radius: 12px;
+    min-height: 102px !important;
+    border-radius: 10px;
   }
   .bslib-value-box .value-box-area {
-    padding: 0.85rem 0.95rem !important;
+    padding: 0.7rem 0.85rem !important;
     line-height: 1.2;
     justify-content: center;
   }
   .bslib-value-box .value-box-title {
-    font-size: 0.82rem;
+    font-size: 0.76rem;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     opacity: 0.92;
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.3rem;
     white-space: normal;
   }
   .bslib-value-box .value-box-value {
-    font-size: 2.6rem !important;
+    font-size: 1.85rem !important;
     font-weight: 700 !important;
     letter-spacing: -0.02em;
     line-height: 1.05;
   }
-  .bslib-value-box .value-box-showcase { padding-left: 1rem; padding-right: 0.5rem; }
+  .bslib-value-box .value-box-showcase { padding-left: 0.75rem; padding-right: 0.5rem; }
   .bslib-value-box .value-box-showcase i, .bslib-value-box .value-box-showcase svg {
-    font-size: 2.4rem;
-    width: 2.4rem; height: 2.4rem;
+    font-size: 1.85rem;
+    width: 1.85rem; height: 1.85rem;
   }
 
   /* Force the choropleth container to its declared height and stretch leaflet
@@ -204,13 +204,6 @@ custom_css <- "
   .map-card { min-height: 760px; }
   .map-card .card-body { padding: 0 !important; height: 720px; }
   .map-card .leaflet-container { height: 720px !important; width: 100% !important; }
-
-  /* Verdict pill on the Statistical evidence strip. */
-  .verdict-dot { display: inline-block; width: 8px; height: 8px;
-                  border-radius: 50%; margin-right: 6px;
-                  vertical-align: middle; }
-  .verdict-tag { font-size: 0.72rem; text-transform: uppercase;
-                  letter-spacing: 0.04em; color: #6B7280; }
 
   /* Slider tweaks for the year navigator. */
   .irs-bar, .irs-bar-edge { background: #0F4C81 !important; border-color: #0F4C81 !important; }
@@ -342,14 +335,6 @@ ui <- page_navbar(
               uiOutput("rank_export"))
         )
       )
-    ),
-
-    br(),
-
-    card(
-      card_header("Statistical evidence"),
-      div(style = "padding: 0.5rem 1.5rem 0.9rem 1.5rem;",
-          uiOutput("stat_evidence"))
     )
   ),
 
@@ -485,61 +470,6 @@ server <- function(input, output, session) {
     rank_block(df, "value", "rank-export")
   })
 
-  # Statistical evidence (static — uses headline numbers, not year-filtered)
-  output$stat_evidence <- renderUI({
-    if (length(headline) == 0) return(p("Headline numbers unavailable."))
-    p_h1 <- as.numeric(headline["h1_p"])
-    p_h2 <- as.numeric(headline["h2_p"])
-    p_h3 <- as.numeric(headline["h3_year_p"])
-    p_h4 <- as.numeric(headline["h4_moran_p"])
-    verdict <- function(p) {
-      ok <- !is.na(p) && p < 0.05
-      list(color = if (ok) "#10B981" else "#9CA3AF",
-           tag   = if (ok) "Reject H₀" else "n.s.")
-    }
-    rows <- list(
-      list("H1 · mean ULS mobility ≠ 0",
-           sprintf("t = %s · p = %s",
-                   headline["h1_t"], headline["h1_p"]),
-           sprintf("mean = %s deliv./yr", headline["h1_estimate"]),
-           verdict(p_h1)),
-      list("H2 · urban tertiary > peripheral",
-           sprintf("W = %s · p = %s",
-                   headline["h2_W"], headline["h2_p"]),
-           "Wilcoxon two-sample",
-           verdict(p_h2)),
-      list("H3 · drift over time (lmer)",
-           sprintf("β = %s/yr · p = %s",
-                   headline["h3_year_coef"], headline["h3_year_p"]),
-           sprintf("95%% CI %s", headline["h3_year_ci"]),
-           verdict(p_h3)),
-      list("H4 · spatial clustering (Moran's I)",
-           sprintf("I = %s · p = %s",
-                   headline["h4_moran_I"], headline["h4_moran_p"]),
-           "k = 5 NN, ULS centroids",
-           verdict(p_h4))
-    )
-    cells <- lapply(rows, function(r) {
-      v <- r[[4]]
-      tags$div(style = "padding: 0.55rem 1rem; border-left: 1px solid #F3F4F6;",
-               tags$div(style = "color: #6B7280; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.3rem;", r[[1]]),
-               tags$div(class = "stat-num",
-                        style = "color: #1F2937; font-size: 0.95rem; margin-bottom: 0.25rem;",
-                        r[[2]]),
-               tags$div(style = "color: #6B7280; font-size: 0.78rem; margin-bottom: 0.4rem;",
-                        r[[3]]),
-               tags$div(
-                 tags$span(class = "verdict-dot",
-                           style = sprintf("background:%s;", v$color)),
-                 tags$span(class = "verdict-tag",
-                           style = sprintf("color:%s; font-weight:600;", v$color),
-                           v$tag)))
-    })
-    cells[[1]]$attribs$style <- sub("border-left: 1px solid #F3F4F6;", "",
-                                    cells[[1]]$attribs$style, fixed = TRUE)
-    tags$div(style = "display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;",
-             tagList(cells))
-  })
 
   # Choropleth
   output$map_choropleth <- renderLeaflet({
