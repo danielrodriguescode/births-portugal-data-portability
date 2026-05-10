@@ -31,8 +31,7 @@ suppressPackageStartupMessages({
   library(forcats)
 })
 
-# Strip the "Unidade Local de Saude (de|do|da|...)" prefix that bloats every
-# label. The 'u' escape is used instead of a literal 'ú' so the pattern is
+# Strip the "Unidade Local de Saude (de|do|da|...)" prefix. The 'u' escape is used instead of a literal 'ú' so the pattern is
 # ASCII-source and the regex engine doesn't choke on a Latin1/UTF-8 mismatch.
 ULS_PREFIX_RE <- "^Unidade Local de Sa\u00fade (?:de|do|da|dos|das|d')\\s+"
 uls_short_name <- function(x) {
@@ -282,13 +281,13 @@ ui <- page_navbar(
           tags$strong(period_label),
           "), only ",
           tags$strong(sprintf("%s%%", headline["share_positive_mobility"])),
-          " are net importers of deliveries — the other ",
+          " are net importers of deliveries. The other ",
           sprintf("%d ULS", 39 - round(as.numeric(headline["share_positive_mobility"]) / 100 * 39)),
           " export births to other ULS or to private hospitals."
         ))),
       p(class = "why",
         "If a woman delivers outside her resident ULS, her prenatal record stays behind. ",
-        "This dashboard quantifies the mismatch — and the case for portable maternal health records across SNS institutions."
+        "This dashboard quantifies the mismatch, , reinforcing the need for interoperable maternal health records across the SNS."
       ),
       div(class = "explainer",
           tags$strong("Mobility"),
@@ -412,9 +411,9 @@ ui <- page_navbar(
 
     div(class = "lede-block",
       p(class = "lede",
-        HTML("Four pre-registered hypotheses, one statistical test each — chosen to match what the data can and cannot say.")),
+        HTML("Four pre-registered hypotheses chosen to match what the data can and cannot say.")),
       p(class = "why",
-        "Unit of analysis: the 39 mainland ULS (PPPs reported separately). Use the tabs below to read each hypothesis end-to-end — question, test, result, and what the result actually means.")
+        "Unit of analysis: the 39 mainland ULS. Use the tabs below to read each hypothesis end-to-end.")
     ),
 
     navset_card_tab(
@@ -427,26 +426,24 @@ ui <- page_navbar(
             h4(class = "hyp-title", uiOutput("h1_header")),
             tags$div(class = "hyp-q",
                      tags$strong("Question. "),
-                     "Are Portuguese ULS in balance, on average — does the typical ULS deliver as many babies as it has resident births?"),
+                     "Does the typical ULS deliver as many babies as it has resident births?"),
             tags$div(class = "hyp-test",
                      tags$strong("Test. "),
-                     "One-sample t-test on the 39 per-ULS mean mobility values against the null mean 0. ",
-                     tags$em("Why this one: "), "collapsing to one number per ULS gives 39 IID observations; the underlying panel is autocorrelated (each ULS appears 11 times) and would violate the t-test's assumptions if used directly."),
+                     "One-sample t-test on the 39 per-ULS mean mobility values against the null mean 0."),
             plotlyOutput("plot_h1", height = 480),
             tags$div(class = "hyp-out", uiOutput("h1_result")),
             tags$div(class = "hyp-interpret",
               tags$p(tags$strong("What it means."),
                 " On average, every Portuguese ULS has roughly ", tags$strong("434 fewer SNS deliveries"),
-                " per year than the births to its residents. Only 7 of 39 ULS (17.9 %) are net importers; the rest export. The result is statistically far from zero (p = 0.001) and the 95 % confidence interval ",
+                " per year than the births of its residents. Only 7 of 39 ULS (17.9 %) are net importers; the rest export. The result is statistically far from zero (p = 0.001) and the 95 % confidence interval ",
                 tags$span(class = "stat-num", "[-691, -178]"), " never crosses zero."),
               tags$p(tags$strong("Two mechanisms."),
                 " The mismatch can come from (a) ", tags$em("genuine inter-ULS mobility"),
-                " — referrals, perceived quality, proximity, high-risk pathways — or (b) the ",
+                " like referrals, perceived quality, proximity, high-risk pathways; or (b) the ",
                 tags$em("public-private coverage gap"),
                 ": PORDATA counts births in private hospitals, Transparência SNS does not. Private maternity provision is concentrated in Lisboa, Porto, and the Algarve. Our data cannot separate (a) from (b) cleanly, so the ",
-                tags$strong("absolute magnitude"), " of -434 is biased downward by the private gap. The ",
-                tags$strong("sign"), " is robust — both mechanisms push it the same way."),
-              tags$p(tags$strong("Why this hypothesis matters."),
+                tags$strong("absolute magnitude"), " of -434 is biased downward by the private hospitals."),
+              tags$p(tags$strong("What is the importance of this hypothesis?"),
                 " H1 establishes that the catchment-design assumption is empirically wrong. Whether driven by referrals or by the private sector, the prenatal records held by the regional public provider are not where the delivery is happening for ",
                 tags$strong("the typical ULS, not just outliers"), ". This is the foundation for the data-portability case made on the Overview tab.")
             )
@@ -464,21 +461,21 @@ ui <- page_navbar(
             tags$div(class = "hyp-test",
                      tags$strong("Test. "),
                      "Wilcoxon rank-sum on per-ULS mean mobility, urban tertiary vs peripheral. ",
-                     tags$em("Why this one: "), "Wilcoxon makes no normality assumption and is robust to the heavy tails of the mobility distribution. With n = 6 vs n = 33 the t-test is underpowered and sensitive to outliers — Wilcoxon side-steps both issues."),
+                     tags$em("Why this one: "), "Wilcoxon makes no normality assumption and is robust to the heavy tails of the mobility distribution. With n = 6 vs n = 33 the t-test is underpowered and sensitive to outliers."),
             plotlyOutput("plot_h2", height = 480),
             tags$div(class = "hyp-out", uiOutput("h2_result")),
             tags$div(class = "hyp-interpret",
-              tags$p(tags$strong("Non-significant — but informative."),
-                " W = 80, p = 0.48: there is no detectable difference. The plan predicted academic centres would be magnets; the data say the label is not predictive."),
+              tags$p(tags$strong("Non-significant, but informative."),
+                " W = 80, p = 0.48: there is no detectable difference. This means that academic centres are not magnets; the data say the label is not predictive."),
               tags$p(tags$strong("Why."),
                 " The urban tertiary group spans the entire mobility distribution. ",
                 tags$strong("Coimbra (+2,213/yr)"), " is the country's biggest magnet, ",
-                tags$strong("Santo António (+787/yr)"), " is also strongly positive — but ",
+                tags$strong("Santo António (+787/yr)"), " is also strongly positive, but ",
                 tags$strong("Lisboa Ocidental (-1,841/yr)"),
                 " is among the biggest exporters in Portugal, and Santa Maria, São José, and São João are also net exporters. Once you average across the six, the group mean is barely different from the peripheral mean."),
-              tags$p(tags$strong("What's actually going on."),
+              tags$p(tags$strong("Possible explanation."),
                 " The Lisbon urban-tertiary ULS are ", tags$em("structurally undersized"),
-                " for their resident populations, regardless of academic status. The geographical fact (small physical catchment + dense population + competing private provision) dominates the academic prestige signal. This is a useful reframing: the magnet phenomenon is geography-driven, not prestige-driven, which means the data-portability case applies to ",
+                " for their resident populations, regardless of being clinical academic centers. This is a useful reframing: the magnet phenomenon is geography-driven, which means the data-portability case applies to ",
                 tags$strong("every ULS"), ", not just to a handful of academic centres.")
             )
         )
@@ -506,8 +503,8 @@ ui <- page_navbar(
                 tags$strong("290 fewer SNS deliveries each year"),
                 " disappearing from the public system."),
               tags$p(tags$strong("Where they go."),
-                " Consistent with the well-documented growth of private maternity provision in Portugal over 2014-2024, particularly in the metropolitan areas. PORDATA captures these as resident births, but Transparência SNS does not — so the gap shows up as a steepening negative slope in our metric."),
-              tags$p(tags$strong("Implication for the policy argument."),
+                " Consistent with the well-documented growth of private maternity provision in Portugal over 2014-2024, particularly in the metropolitan areas."),
+              tags$p(tags$strong("Implication for policy"),
                 " H3 sharpens H1: the data-portability question is not a static problem we can ignore. ",
                 tags$em("It is getting worse, not better"),
                 ". A maternal record system that doesn't follow patients across institutional boundaries today will be even more out of step with reality five years from now.")
@@ -522,16 +519,16 @@ ui <- page_navbar(
             h4(class = "hyp-title", uiOutput("h4_header")),
             tags$div(class = "hyp-q",
                      tags$strong("Question. "),
-                     "Are magnets and exporters scattered randomly across Portugal, or do they cluster — neighbours behaving like neighbours?"),
+                     "Are magnets and exporters scattered randomly across Portugal, or do they cluster?"),
             tags$div(class = "hyp-test",
                      tags$strong("Test. "),
                      "Moran's I on the 39 ULS-level mean mobility values, with a k = 5 nearest-neighbour spatial weights matrix on ULS polygon centroids. ",
-                     tags$em("Why this one: "), "Moran's I is the standard global test for spatial autocorrelation. k = 5 NN avoids the boundary issues of contiguity-based weights when ULS polygons are very irregular in size — a tiny urban ULS would otherwise have far fewer neighbours than a large rural one, biasing the test."),
+                     tags$em("Why this one: "), "Moran's I is the standard global test for spatial autocorrelation. k = 5 NN avoids the boundary issues of contiguity-based weights when ULS polygons are very irregular in size."),
             plotlyOutput("plot_h4", height = 480),
             tags$div(class = "hyp-out", uiOutput("h4_result")),
             tags$div(class = "hyp-interpret",
               tags$p(tags$strong("Significant but modest."),
-                " I = 0.115, p = 0.034. Adjacent ULS have similar mobility — the slope of the regression line in the Moran scatter is the I value itself. The high-high quadrant (top-right) means high mobility ULS surrounded by other high-mobility ULS; the low-low quadrant (bottom-left) is the inverse."),
+                " I = 0.115, p = 0.034. Adjacent ULS have similar mobility. The high-high quadrant (top-right) means high mobility ULS surrounded by other high-mobility ULS; the low-low quadrant (bottom-left) is the inverse."),
               tags$p(tags$strong("Two visible clusters."),
                 tags$br(),
                 "• ", tags$strong("Magnet corridor (high-high):"),
@@ -539,11 +536,11 @@ ui <- page_navbar(
                 tags$br(),
                 "• ", tags$strong("Lisbon ring (low-low):"),
                 " Amadora-Sintra, Lisboa Ocidental, Loures-Odivelas, Almada-Seixal, Estuário do Tejo all export, all next to each other."),
-              tags$p(tags$strong("Why this is the cleanest finding."),
+              tags$p(tags$strong("Why does this finding mean?"),
                 " H4 is the most robust of the four to the SNS / private coverage gap. The gap shifts ",
                 tags$em("levels"), " (it makes the Lisbon area look more negative) but it does not change the ",
                 tags$em("spatial pattern"),
-                " — neighbours are still next to neighbours. So even with all the caveats H1's magnitude carries, the conclusion that there is a ",
+                ", neighbours are still next to neighbours. So even with all the caveats H1's magnitude carries, the conclusion that there is a ",
                 tags$strong("structured geography of obstetric flow"), " in Portugal is firm.")
             )
         )
