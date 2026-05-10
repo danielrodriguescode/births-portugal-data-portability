@@ -13,6 +13,26 @@ sync_shiny_data <- function(repo_root = here::here(), verbose = TRUE) {
                     "hospitals.rds", "models.rds")
   required_csv <- "headline.csv"
 
+  # Cache the ulsportugal sf polygons into the bundle. ulsportugal::ulsportugal()
+  # downloads ~60 MB of CAOP geometries on first call; doing it during sync (once,
+  # locally) instead of on every shinyapps.io cold start cuts cold-boot time
+  # significantly and avoids burning 60 MB of egress on every wakeup.
+  cache_uls_map <- function(out_path) {
+    if (!requireNamespace("ulsportugal", quietly = TRUE)) {
+      stop("ulsportugal must be installed to build the Shiny bundle.",
+           call. = FALSE)
+    }
+    if (!requireNamespace("stringi", quietly = TRUE)) {
+      stop("stringi must be installed to build the Shiny bundle.",
+           call. = FALSE)
+    }
+    nfc <- stringi::stri_trans_nfc
+    map <- ulsportugal::ulsportugal()
+    map$NOME_ULS   <- nfc(map$NOME_ULS)
+    map$NOME_CURTO <- nfc(map$NOME_CURTO)
+    saveRDS(map, out_path, compress = "xz")
+  }
+
   if (!dir.exists(proc_dir)) {
     stop("data/processed/ missing — run Rscript run_all.R first.", call. = FALSE)
   }
@@ -39,6 +59,8 @@ sync_shiny_data <- function(repo_root = here::here(), verbose = TRUE) {
   ok <- file.copy(file.path(tables_dir, required_csv),
                   file.path(shiny_data, required_csv), overwrite = TRUE)
   if (!ok) stop("Failed to copy headline.csv into shiny/data/.", call. = FALSE)
+
+  cache_uls_map(file.path(shiny_data, "uls_map.rds"))
 
   if (verbose) {
     bundle <- list.files(shiny_data, full.names = FALSE)

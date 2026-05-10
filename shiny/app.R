@@ -29,8 +29,17 @@ suppressPackageStartupMessages({
   library(stringi)
   library(scales)
   library(forcats)
-  library(ulsportugal)
 })
+
+# Strip the "Unidade Local de Saude (de|do|da|...)" prefix that bloats every
+# label. The 'u' escape is used instead of a literal 'ú' so the pattern is
+# ASCII-source and the regex engine doesn't choke on a Latin1/UTF-8 mismatch.
+ULS_PREFIX_RE <- "^Unidade Local de Sa\u00fade (?:de|do|da|dos|das|d')\\s+"
+uls_short_name <- function(x) {
+  out <- sub(ULS_PREFIX_RE, "", x, perl = TRUE)
+  out <- sub(", EPE$", "", out, perl = TRUE)
+  out
+}
 
 URBAN_TERTIARY_ULS <- vapply(c(
   "Unidade Local de Saúde de São José, EPE",
@@ -50,11 +59,16 @@ hospitals   <- readRDS(file.path(proc_dir, "hospitals.rds")) |>
   mutate(NOME_ULS = nfc(NOME_ULS), instituicao = nfc(instituicao))
 models      <- readRDS(file.path(proc_dir, "models.rds"))
 
-uls_map <- ulsportugal() |>
-  mutate(NOME_ULS = nfc(NOME_ULS), NOME_CURTO = nfc(NOME_CURTO))
+# sf polygons cached into the bundle by R/sync_shiny_data.R — do NOT call
+# ulsportugal::ulsportugal() at runtime; it downloads ~60 MB on every
+# shinyapps.io cold start. Source of truth: data/uls_map.rds.
+uls_map <- readRDS(file.path(proc_dir, "uls_map.rds")) |>
+  mutate(NOME_ULS   = nfc(NOME_ULS),
+         NOME_CURTO = nfc(NOME_CURTO),
+         NOME_PRETTY = uls_short_name(NOME_ULS))
 
 uls_short <- uls_map |> st_drop_geometry() |> as_tibble() |>
-  select(NOME_ULS, NOME_CURTO)
+  select(NOME_ULS, NOME_CURTO, NOME_PRETTY)
 
 uls_means <- models$uls_means |>
   left_join(uls_short, by = c("unit_id" = "NOME_ULS"))
@@ -64,9 +78,11 @@ ppp_panel <- models$ppp_panel
 # Period derived directly from the panel — never trust the CSV string.
 year_range <- range(mobility$year)
 period_label <- sprintf("%d-%d", year_range[1], year_range[2])
-year_choices <- c("Mean of all years" = "mean",
-                  setNames(as.character(seq(year_range[1], year_range[2])),
-                           seq(year_range[1], year_range[2])))
+
+# Mainland Portugal bounding box (slightly padded). Used by the choropleth's
+# fitBounds + setMaxBounds so users can't pan into the Atlantic and the default
+# view doesn't include half of empty Spain.
+PT_BBOX <- list(lng = c(-9.55, -6.10), lat = c(36.92, 42.18))
 
 # ---- Headline numbers ------------------------------------------------------
 headline_path <- file.path(proc_dir, "headline.csv")
@@ -151,6 +167,32 @@ custom_css <- "
                      box-shadow: 0 1px 2px rgba(15,23,42,0.06);
                      font-size: 0.86rem; }
   table.dataTable { font-variant-numeric: tabular-nums; }
+
+  /* Fix value-box title clipping — bslib defaults cropped the first row of text.
+     Force more line-height + a touch of top padding so 'Mean mobility, 2024'
+     etc. render fully. */
+  .bslib-value-box .value-box-area, .bslib-value-box .value-box-title {
+    padding-top: 0.35rem; line-height: 1.2;
+  }
+  .bslib-value-box .value-box-title { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.92; }
+  .bslib-value-box .value-box-value { font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; }
+  .bslib-value-box .value-box-showcase { padding-left: 0.75rem; padding-right: 0.5rem; }
+
+  /* Verdict pill on the Statistical evidence strip. */
+  .verdict-dot { display: inline-block; width: 8px; height: 8px;
+                  border-radius: 50%; margin-right: 6px;
+                  vertical-align: middle; }
+  .verdict-tag { font-size: 0.72rem; text-transform: uppercase;
+                  letter-spacing: 0.04em; color: #6B7280; }
+
+  /* Slider tweaks for the year navigator. */
+  .irs-bar, .irs-bar-edge { background: #0F4C81 !important; border-color: #0F4C81 !important; }
+  .irs-from, .irs-to, .irs-single { background: #0F4C81 !important; }
+  .irs-grid-text { color: #6B7280 !important; }
+
+  /* Lede block — keep it tight, no overlap with the explainer. */
+  .lede-block { display: flex; flex-direction: column; gap: 0.85rem; max-width: 78ch; }
+  .legend-tip { font-size: 0.72rem; color: #6B7280; margin-top: 4px; }
 "
 
 # ---- UI helpers ------------------------------------------------------------
@@ -160,18 +202,19 @@ mobility_palette <- function(domain_abs) {
                na.color = "#E5E7EB")
 }
 
-rank_block <- function(df, value_col, css_class, n = 5) {
+rank_block <- function(df, value_col, css_class, n = 7) {
   df <- df |> head(n)
   rows <- mapply(function(name, val) {
     tags$div(class = paste("rank-row", css_class),
              tags$span(class = "name", name),
              tags$span(class = "val", fmt_signed(val)))
-  }, df$NOME_CURTO, df[[value_col]], SIMPLIFY = FALSE, USE.NAMES = FALSE)
+  }, df$NOME_PRETTY, df[[value_col]], SIMPLIFY = FALSE, USE.NAMES = FALSE)
   do.call(tagList, rows)
 }
 
 # ---- UI --------------------------------------------------------------------
 ui <- page_navbar(
+  id = "main_nav",
   title = "Births in Portugal",
   theme = theme,
   header = tags$head(
@@ -184,37 +227,40 @@ ui <- page_navbar(
   nav_panel(
     "Overview",
 
-    layout_column_wrap(
-      width = 1, gap = "1rem",
-      div(
-        p(class = "lede",
-          HTML(paste0(
-            "Do mothers in Portugal deliver in their own region? Across ",
-            "the 39 mainland Unidades Locais de Saúde (",
-            tags$strong(period_label),
-            "), only ",
-            tags$strong(sprintf("%s%%", headline["share_positive_mobility"])),
-            " are net importers of deliveries — the other ",
-            sprintf("%d ULS", 39 - round(as.numeric(headline["share_positive_mobility"]) / 100 * 39)),
-            " export births to other ULS or to private hospitals."
-          ))),
-        p(class = "why",
-          "If a woman delivers outside her resident ULS, her prenatal record stays behind. ",
-          "This dashboard quantifies the mismatch — and the case for portable maternal health records across SNS institutions."
-        )
+    div(class = "lede-block",
+      p(class = "lede",
+        HTML(paste0(
+          "Do mothers in Portugal deliver in their own region? Across ",
+          "the 39 mainland Unidades Locais de Saúde (",
+          tags$strong(period_label),
+          "), only ",
+          tags$strong(sprintf("%s%%", headline["share_positive_mobility"])),
+          " are net importers of deliveries — the other ",
+          sprintf("%d ULS", 39 - round(as.numeric(headline["share_positive_mobility"]) / 100 * 39)),
+          " export births to other ULS or to private hospitals."
+        ))),
+      p(class = "why",
+        "If a woman delivers outside her resident ULS, her prenatal record stays behind. ",
+        "This dashboard quantifies the mismatch — and the case for portable maternal health records across SNS institutions."
       ),
       div(class = "explainer",
-          tags$strong("What is mobility? "),
-          "For each ULS, ", tags$em("Hospital deliveries"), " (Transparência SNS) minus ",
-          tags$em("Resident births"), " (PORDATA aggregated to ULS). ",
-          "Positive = net importer (magnet). Negative = net exporter."
+          tags$strong("Mobility"),
+          " = hospital deliveries inside the ULS − births to its residents. ",
+          tags$span(style = sprintf("color:%s; font-weight:600;", IMPORT), "Positive = magnet"),
+          "  ·  ",
+          tags$span(style = sprintf("color:%s; font-weight:600;", EXPORT), "Negative = exporter"),
+          tags$span(class = "legend-tip",
+                    " · Click a ULS on the map to see its detail.")
       ),
       div(class = "year-bar",
           tags$label("Filter by year"),
-          div(style = "min-width: 220px;",
-              selectInput("year_overview", label = NULL,
-                          choices = year_choices,
-                          selected = as.character(year_range[2]),
+          div(style = "flex: 1; max-width: 560px;",
+              sliderInput("year_overview", label = NULL,
+                          min = year_range[1], max = year_range[2],
+                          value = year_range[2], step = 1, sep = "",
+                          ticks = TRUE,
+                          animate = animationOptions(interval = 1100,
+                                                      loop = FALSE),
                           width = "100%"))
       )
     ),
@@ -258,14 +304,14 @@ ui <- page_navbar(
       ),
       div(
         card(
-          card_header("Top 5 net importers"),
-          div(style = "padding: 0.5rem 1rem 0.75rem 1rem;",
+          card_header("Top 7 net importers"),
+          div(style = "padding: 0.4rem 1rem 0.6rem 1rem;",
               uiOutput("rank_import"))
         ),
         br(),
         card(
-          card_header("Top 5 net exporters"),
-          div(style = "padding: 0.5rem 1rem 0.75rem 1rem;",
+          card_header("Top 7 net exporters"),
+          div(style = "padding: 0.4rem 1rem 0.6rem 1rem;",
               uiOutput("rank_export"))
         )
       )
@@ -363,22 +409,14 @@ ui <- page_navbar(
 # ---- Server ----------------------------------------------------------------
 server <- function(input, output, session) {
 
-  # Reactive: per-ULS data for the selected year (or per-ULS mean over all years)
+  # Reactive: per-ULS data for the selected year (slider value, integer).
   uls_for_year <- reactive({
-    sel <- input$year_overview
-    if (is.null(sel) || sel == "mean") {
-      uls_map |>
-        left_join(uls_means |> select(unit_id, mean_mobility),
-                  by = c("NOME_ULS" = "unit_id")) |>
-        rename(value = mean_mobility)
-    } else {
-      yr <- as.integer(sel)
-      yr_data <- mobility |> filter(year == yr) |>
-        select(unit_id, mobility, deliveries, resident_births, mobility_ratio)
-      uls_map |>
-        left_join(yr_data, by = c("NOME_ULS" = "unit_id")) |>
-        rename(value = mobility)
-    }
+    yr <- as.integer(input$year_overview %||% year_range[2])
+    yr_data <- mobility |> filter(year == yr) |>
+      select(unit_id, mobility, deliveries, resident_births, mobility_ratio)
+    uls_map |>
+      left_join(yr_data, by = c("NOME_ULS" = "unit_id")) |>
+      rename(value = mobility)
   })
 
   # KPIs — each reacts to the year selector
@@ -392,19 +430,16 @@ server <- function(input, output, session) {
   })
   output$kpi_mean    <- renderText({
     df <- uls_for_year()
-    if (all(is.na(df$value))) "—" else fmt_signed(mean(df$value, na.rm = TRUE))
+    if (all(is.na(df$value))) "—" else
+      paste(fmt_signed(mean(df$value, na.rm = TRUE)), "deliv./yr")
   })
   output$kpi_mean_label <- renderText({
-    sel <- input$year_overview
-    if (is.null(sel) || sel == "mean") "Mean mobility (per ULS / yr)" else
-      sprintf("Mean mobility, %s", sel)
+    sprintf("Mean mobility, %s", input$year_overview %||% year_range[2])
   })
 
   # Map title reflects selection
   output$map_title <- renderText({
-    sel <- input$year_overview
-    if (is.null(sel) || sel == "mean") "Mean ULS mobility" else
-      sprintf("ULS mobility, %s", sel)
+    sprintf("ULS mobility, %s", input$year_overview %||% year_range[2])
   })
 
   # Top-5 ranks
@@ -426,26 +461,53 @@ server <- function(input, output, session) {
   # Statistical evidence (static — uses headline numbers, not year-filtered)
   output$stat_evidence <- renderUI({
     if (length(headline) == 0) return(p("Headline numbers unavailable."))
+    p_h1 <- as.numeric(headline["h1_p"])
+    p_h2 <- as.numeric(headline["h2_p"])
+    p_h3 <- as.numeric(headline["h3_year_p"])
+    p_h4 <- as.numeric(headline["h4_moran_p"])
+    verdict <- function(p) {
+      ok <- !is.na(p) && p < 0.05
+      list(color = if (ok) "#10B981" else "#9CA3AF",
+           tag   = if (ok) "Reject H₀" else "n.s.")
+    }
     rows <- list(
       list("H1 · mean ULS mobility ≠ 0",
-           sprintf("t = %s, p = %s, mean = %s",
-                   headline["h1_t"], headline["h1_p"], headline["h1_estimate"])),
+           sprintf("t = %s · p = %s",
+                   headline["h1_t"], headline["h1_p"]),
+           sprintf("mean = %s deliv./yr", headline["h1_estimate"]),
+           verdict(p_h1)),
       list("H2 · urban tertiary > peripheral",
-           sprintf("W = %s, p = %s (n.s.)",
-                   headline["h2_W"], headline["h2_p"])),
+           sprintf("W = %s · p = %s",
+                   headline["h2_W"], headline["h2_p"]),
+           "Wilcoxon two-sample",
+           verdict(p_h2)),
       list("H3 · drift over time (lmer)",
-           sprintf("β = %s/yr, p = %s",
-                   headline["h3_year_coef"], headline["h3_year_p"])),
+           sprintf("β = %s/yr · p = %s",
+                   headline["h3_year_coef"], headline["h3_year_p"]),
+           sprintf("95%% CI %s", headline["h3_year_ci"]),
+           verdict(p_h3)),
       list("H4 · spatial clustering (Moran's I)",
-           sprintf("I = %s, p = %s",
-                   headline["h4_moran_I"], headline["h4_moran_p"]))
+           sprintf("I = %s · p = %s",
+                   headline["h4_moran_I"], headline["h4_moran_p"]),
+           "k = 5 NN, ULS centroids",
+           verdict(p_h4))
     )
     cells <- lapply(rows, function(r) {
-      tags$div(style = "padding: 0.5rem 1rem; border-left: 1px solid #F3F4F6;",
-               tags$div(style = "color: #6B7280; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.25rem;", r[[1]]),
-               tags$div(class = "stat-num", style = "color: #1F2937; font-size: 0.95rem;", r[[2]]))
+      v <- r[[4]]
+      tags$div(style = "padding: 0.55rem 1rem; border-left: 1px solid #F3F4F6;",
+               tags$div(style = "color: #6B7280; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.3rem;", r[[1]]),
+               tags$div(class = "stat-num",
+                        style = "color: #1F2937; font-size: 0.95rem; margin-bottom: 0.25rem;",
+                        r[[2]]),
+               tags$div(style = "color: #6B7280; font-size: 0.78rem; margin-bottom: 0.4rem;",
+                        r[[3]]),
+               tags$div(
+                 tags$span(class = "verdict-dot",
+                           style = sprintf("background:%s;", v$color)),
+                 tags$span(class = "verdict-tag",
+                           style = sprintf("color:%s; font-weight:600;", v$color),
+                           v$tag)))
     })
-    # Drop the leading divider on the first cell so it doesn't show against the card edge.
     cells[[1]]$attribs$style <- sub("border-left: 1px solid #F3F4F6;", "",
                                     cells[[1]]$attribs$style, fixed = TRUE)
     tags$div(style = "display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;",
@@ -457,31 +519,73 @@ server <- function(input, output, session) {
     df <- uls_for_year()
     finite_vals <- df$value[is.finite(df$value)]
     if (length(finite_vals) == 0) {
-      return(leaflet() |> addProviderTiles(providers$CartoDB.PositronNoLabels))
+      return(
+        leaflet() |>
+          addProviderTiles(providers$CartoDB.PositronNoLabels) |>
+          fitBounds(PT_BBOX$lng[1], PT_BBOX$lat[1],
+                    PT_BBOX$lng[2], PT_BBOX$lat[2])
+      )
     }
     domain_abs <- max(abs(finite_vals), na.rm = TRUE)
     pal <- mobility_palette(domain_abs)
-    df$mobility_ratio_pct <- if ("mobility_ratio" %in% names(df))
-      ifelse(is.na(df$mobility_ratio), "",
-             sprintf(" (%s)", fmt_pct(ratio_to_surplus(df$mobility_ratio)))) else ""
+    surplus_pct <- if ("mobility_ratio" %in% names(df))
+      ifelse(is.na(df$mobility_ratio), "—",
+             fmt_pct(ratio_to_surplus(df$mobility_ratio))) else
+      rep("—", nrow(df))
+    deliveries_str <- if ("deliveries" %in% names(df))
+      fmt_int(df$deliveries) else rep("—", nrow(df))
+    residents_str <- if ("resident_births" %in% names(df))
+      fmt_int(df$resident_births) else rep("—", nrow(df))
     label <- sprintf(
-      "<div style='font-weight:600; color:#0F172A;'>%s</div>
-       <div style='color:#374151;'>%s%s</div>",
-      df$NOME_CURTO,
+      "<div style='font-weight:600; color:#0F172A; font-size:0.92rem;'>%s</div>
+       <div style='margin-top:4px; color:#1F2937;'>Mobility: <span class='stat-num' style='font-weight:600;'>%s</span> <span style='color:#6B7280;'>(%s)</span></div>
+       <div style='color:#6B7280; font-size:0.78rem; margin-top:2px;'>Deliveries %s · Residents %s</div>",
+      df$NOME_PRETTY,
       ifelse(is.na(df$value), "n/a", fmt_signed(df$value)),
-      df$mobility_ratio_pct
+      surplus_pct,
+      deliveries_str, residents_str
     ) |> lapply(htmltools::HTML)
-    leaflet(df) |>
+    leaflet(df, options = leafletOptions(minZoom = 6, maxZoom = 11)) |>
       addProviderTiles(providers$CartoDB.PositronNoLabels) |>
+      fitBounds(PT_BBOX$lng[1], PT_BBOX$lat[1],
+                PT_BBOX$lng[2], PT_BBOX$lat[2]) |>
+      setMaxBounds(PT_BBOX$lng[1] - 1.5, PT_BBOX$lat[1] - 1.0,
+                   PT_BBOX$lng[2] + 1.5, PT_BBOX$lat[2] + 1.0) |>
       addPolygons(fillColor = ~pal(value),
                   weight = 0.6, color = "#FFFFFF",
                   fillOpacity = 0.78,
                   label = label,
+                  layerId = ~NOME_ULS,
                   highlightOptions = highlightOptions(weight = 2,
                                                      color = ACCENT,
                                                      bringToFront = TRUE)) |>
       addLegend("bottomright", pal = pal, values = ~value,
-                title = "Mobility", opacity = 0.85, na.label = "n/a")
+                title = htmltools::HTML(
+                  "<div style='font-weight:600;'>Mobility</div>
+                   <div style='font-size:0.7rem; color:#6B7280; font-weight:400;'>deliveries / yr · + magnet · − exporter</div>"),
+                opacity = 0.85, na.label = "n/a",
+                labFormat = function(type, cuts, p) {
+                  paste0(ifelse(cuts >= 0, "+", "−"),
+                         formatC(abs(cuts), big.mark = ",", format = "d"))
+                })
+  })
+
+  # Click a polygon → switch to By ULS tab (and remember the chosen year + ULS).
+  selected_uls <- reactiveVal(NULL)
+  observeEvent(input$map_choropleth_shape_click, {
+    click <- input$map_choropleth_shape_click
+    if (is.null(click$id)) return()
+    selected_uls(click$id)
+    yr <- as.integer(input$year_overview %||% year_range[2])
+    updateSliderInput(session, "year_explorer", value = yr)
+    updateNavbarPage_safe <- function() {
+      if (exists("updateNavbarPage", mode = "function")) {
+        updateNavbarPage(session, "main_nav", selected = "By ULS")
+      } else {
+        nav_select("main_nav", "By ULS", session = session)
+      }
+    }
+    updateNavbarPage_safe()
   })
 
   # By-ULS scatter + table
@@ -493,11 +597,10 @@ server <- function(input, output, session) {
   output$plot_obs_vs_exp <- renderPlotly({
     df <- filtered_explorer()
     if (nrow(df) == 0) return(NULL)
-    df$urban <- df$unit_id %in% URBAN_TERTIARY_ULS
     p <- ggplot(df, aes(resident_births, deliveries,
                         text = sprintf(
-                          "%s<br>Deliveries: %s<br>Residents: %s<br>Mobility: %s (%s)",
-                          NOME_CURTO,
+                          "%s<br>Deliveries: %s · Residents: %s<br>Mobility: %s (%s)",
+                          NOME_PRETTY,
                           fmt_int(deliveries), fmt_int(resident_births),
                           fmt_signed(mobility),
                           fmt_pct(ratio_to_surplus(mobility_ratio))))) +
@@ -519,15 +622,21 @@ server <- function(input, output, session) {
   })
 
   output$table_uls <- renderDT({
-    filtered_explorer() |>
-      transmute(ULS = NOME_CURTO,
+    sel <- selected_uls()
+    df <- filtered_explorer() |>
+      transmute(ULS = NOME_PRETTY,
+                NOME_ULS = unit_id,
                 Deliveries = round(deliveries),
                 `Resident births` = round(resident_births),
                 Mobility = round(mobility),
-                Ratio = fmt_pct(ratio_to_surplus(mobility_ratio))) |>
+                Ratio = fmt_pct(ratio_to_surplus(mobility_ratio)))
+    selection <- if (!is.null(sel)) which(df$NOME_ULS == sel) else integer(0)
+    df |>
+      select(-NOME_ULS) |>
       datatable(rownames = FALSE,
                 options = list(pageLength = 12, dom = "tip",
-                               order = list(list(3, "asc"))))
+                               order = list(list(3, "asc"))),
+                selection = list(mode = "single", selected = selection))
   })
 
   # Over-time plots
@@ -535,6 +644,11 @@ server <- function(input, output, session) {
     df <- mobility |>
       group_by(year) |>
       summarise(mean_mobility = mean(mobility, na.rm = TRUE), .groups = "drop")
+    beta <- as.numeric(headline["h3_year_coef"])
+    pval <- headline["h3_year_p"]
+    annot <- if (!is.na(beta))
+      sprintf("Trend: %s deliv./ULS/yr · p = %s",
+              fmt_signed(beta), pval) else ""
     p <- ggplot(df, aes(year, mean_mobility,
                         text = sprintf("Year %d<br>Mean mobility: %s",
                                        year, fmt_signed(mean_mobility)))) +
@@ -543,22 +657,25 @@ server <- function(input, output, session) {
                   colour = ACCENT, fill = "#DBEAFE", linewidth = 0.8) +
       geom_point(colour = ACCENT, size = 3) +
       scale_y_continuous(labels = comma) +
-      labs(x = NULL, y = "Mean mobility (deliveries/ULS)") +
+      labs(x = NULL, y = "Mean mobility (deliveries/ULS)",
+           subtitle = annot) +
       theme_minimal(base_family = "Inter") +
-      theme(panel.grid.minor = element_blank())
+      theme(panel.grid.minor = element_blank(),
+            plot.subtitle = element_text(size = 10, colour = "#6B7280",
+                                          margin = margin(b = 6)))
     ggplotly(p, tooltip = "text") |> config(displayModeBar = FALSE)
   })
 
   output$plot_heatmap <- renderPlotly({
     df <- mobility |>
       left_join(uls_short, by = c("unit_id" = "NOME_ULS")) |>
-      group_by(unit_id, NOME_CURTO) |>
+      group_by(unit_id, NOME_PRETTY) |>
       mutate(overall = mean(mobility)) |>
       ungroup() |>
-      mutate(NOME_CURTO = fct_reorder(NOME_CURTO, overall))
-    p <- ggplot(df, aes(year, NOME_CURTO, fill = mobility,
+      mutate(NOME_PRETTY = fct_reorder(NOME_PRETTY, overall))
+    p <- ggplot(df, aes(year, NOME_PRETTY, fill = mobility,
                         text = sprintf("%s — %d<br>Mobility: %s",
-                                       NOME_CURTO, year,
+                                       NOME_PRETTY, year,
                                        fmt_signed(mobility)))) +
       geom_tile(colour = "white", linewidth = 0.4) +
       scale_fill_gradient2(low = EXPORT, mid = NEUTRAL, high = IMPORT,
@@ -566,7 +683,7 @@ server <- function(input, output, session) {
       labs(x = NULL, y = NULL) +
       theme_minimal(base_family = "Inter") +
       theme(panel.grid = element_blank(),
-            axis.text.y = element_text(size = 8, colour = "#374151"),
+            axis.text.y = element_text(size = 9, colour = "#374151"),
             axis.text.x = element_text(colour = "#374151"))
     ggplotly(p, tooltip = "text") |> config(displayModeBar = FALSE)
   })
