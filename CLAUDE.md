@@ -10,7 +10,7 @@ This is **not a generic software project**. It is a research codebase for a PhD 
 
 **Deliverables (all mandatory):**
 1. **R analytical pipeline** producing the ULS-level Mobility metric (see Methodology below).
-2. **Shiny application** deployable to shinyapps.io with six tabs: Answer, Regional Overview (choropleth), Hospital Explorer (observed-vs-expected), Cross-Regional Flow (heatmap), Methods (plain language), Data.
+2. **Shiny application** deployable to shinyapps.io with seven tabs: Answer (headline + 4-test table), Map (ULS choropleth via `ulsportugal`), ULS Explorer (deliveries-vs-residents scatter), Heatmap (mobility ULS × year), PPP hospitals (separate panel for the four PPPs excluded from H1–H4), Methods (plain language), Data (source attribution & links).
 3. **Academic paper** (IMRaD) targeting JAMIA / IJMI / Acta Médica Portuguesa — kept locally as `deliverables/paper.pdf`. **Not committed to the GitHub repo** by project policy; the public repo carries the pipeline, not the manuscript.
 4. **Oral defense presentation** (5 content slides for the 10-min defense) — kept locally as `deliverables/slides.pptx`. **Not committed to the GitHub repo** for the same reason.
 5. **GitHub repo** with README, [prompts.md](prompts.md) (LLM interactions, mandated by the course), data download instructions, and reproducibility notes.
@@ -62,7 +62,7 @@ R only. Do not introduce Python — the assignment allows it but the project pla
 ├── deliverables/            # LOCAL-ONLY, gitignored. Holds:
 │   ├── paper.pdf            #   - IMRaD manuscript (rendered)
 │   └── slides.pptx          #   - 10-min oral-defense PPTX deck
-├── run_all.R                # Master orchestrator (sources 00→04)
+├── run_all.R                # Master orchestrator (sources 00→04 + sync_shiny_data)
 ├── RESULTS.md               # Plain-language executive summary of findings
 ├── prompts.md               # MANDATORY: every LLM prompt + critical comment
 ├── data/DATA_DICTIONARY.md  # Source, variables, time period, study population
@@ -75,7 +75,7 @@ The paper and presentation are **not part of the GitHub repository** by project 
 
 ## Common commands
 
-All commands assume the working directory is the project root (use `here::here()` inside scripts, not `setwd()`).
+All commands assume the working directory is the project root. Use `here::here()` inside `R/` scripts and `run_all.R` / `deploy_app.R`, not `setwd()`. **Do not use `here::here()` inside `shiny/app.R`** — the deployed app has no project-root marker on shinyapps.io and will fail to start (see "Shiny self-containment contract" below).
 
 ```bash
 # One-off setup
@@ -108,22 +108,24 @@ There is no formal test suite. If you add validation, prefer `testthat` placed u
 
 ## Pipeline architecture
 
-The pipeline is **strictly sequential and idempotent**. Each numbered script reads from `data/processed/` (or `data/raw/` for `01_import.R`) and writes its outputs back to `data/processed/` as `.rds`. Never mutate raw files. Never short-circuit by sourcing one script from another at runtime — `run_all.R` is the only orchestrator.
+The pipeline is **strictly sequential and idempotent**. Each numbered script in `R/` reads from `data/processed/` (or `data/raw/` for `01_import.R`) and writes its outputs back to `data/processed/` as `.rds`. Never mutate raw files. Never short-circuit by sourcing one script from another at runtime — `run_all.R` is the only orchestrator, and it ends by calling `sync_shiny_data()` so the Shiny bundle in `shiny/data/` always reflects the latest pipeline run.
 
 1. **`00_download.R`** — fetch SNS CSV from Transparência SNS (env var `FORCE_REDOWNLOAD=TRUE` to bypass the local-file skip). PORDATA xlsx must be exported manually from pordata.pt — the file does not expose a stable direct URL.
 2. **`01_import.R`** — read `partos-e-cesarianas.csv` (semicolon, UTF-8) and `pordata.xlsx` (sheet 1, no header parsing — preserve the multi-row layout for 02 to handle). Output `raw_partos.rds`, `raw_pordata.rds`.
-3. **`02_clean.R`** — apply data-quality filters and produce tidy panels:
+3. **`02_clean.R`** — apply data-quality filters, build the concelho→ULS crosswalk, and aggregate both sources to ULS level:
     - Drop years with non-December latest month (filters partial 2026)
     - Hospital identity = `(instituicao, regiao)` — *never* include lat/lng in the key (drift across releases splits the same hospital into two ids)
     - Take the **December** value as the annual total (the SNS monthly counters are cumulative year-to-date — see "Data notes that bite" below)
-    - PORDATA: skip rows 1–5 (metadata), use row 6 cols 3–21 as year labels (Total block; cols 22+ are Masculino/Feminino), pivot wide-to-long, filter to NUTS II/III ≥ 2010
-    - Output `partos_annual.rds`, `pordata_annual.rds`, `hospitals.rds`.
+    - Map hospitals to ULS by spatial point-in-polygon against `ulsportugal()` polygons, falling back to direct ULS-name match for the few hospitals with imprecise reported coordinates
+    - PORDATA: skip rows 1–5 (metadata), use row 6 cols 3–21 as year labels (Total block; cols 22+ are Masculino/Feminino), pivot wide-to-long, then aggregate concelho→ULS using the freguesia-share crosswalk (3 split concelhos: Lisboa, Loures, Porto)
+    - Output `crosswalk_concelho_uls.rds`, `partos_uls.rds`, `pordata_uls.rds`, `hospitals.rds`.
 4. **`03_analyse.R`** — compute, per `(uls, year)`:
    `Mobility = HospitalDeliveries(uls, year) − ResidentBirths(uls, year)`
    No capacity proxy, no redistribution. PORDATA is aggregated to ULS via the concelho→ULS dictionary in `ulsportugal` (3 split concelhos — Lisboa, Loures, Porto — allocated proportionally to freguesia counts). Apply Unicode NFC normalisation (`stringi::stri_trans_nfc`) on every join key — without it the SNS data (composed `ã`) silently fails to match the crosswalk source-file (decomposed). Run H1 (one-sample t-test on per-ULS means, n=39 — no IID violation), H2 (Wilcoxon urban tertiary vs other), H3 (lmer with `lmerTest`-derived Satterthwaite p-values), H4 (Moran's I, k=5 NN on ULS polygon centroids). Output `mobility_panel.rds`, `models.rds`, `outputs/tables/headline.csv`, `outputs/tables/ppp_panel.csv`.
 5. **`04_visualise.R`** — generate every static figure into `outputs/figures/` for use by the dashboard and the locally-rendered paper PDF. Currently 7 figures (deliveries top-10 ULS, caesarean rate, mobility per ULS, deliveries-vs-residents, mobility heatmap, two lmer diagnostics, H2 box+strip).
+6. **`R/sync_shiny_data.R`** — copies the five required `.rds` panels and `outputs/tables/headline.csv` into `shiny/data/`. Sourced by `run_all.R` at the very end so a fresh pipeline run leaves the Shiny bundle ready for both local launch and `deploy_app.R`.
 
-The Shiny app reads the same `data/processed/*.rds` artefacts. It does **not** re-run the pipeline. If app data looks stale, run `run_all.R` first.
+The Shiny app reads ONLY from `shiny/data/` — it does not re-run the pipeline and does not reach back into `data/processed/`. If app data looks stale, run `run_all.R` (or `DRY_RUN=TRUE Rscript deploy_app.R` to refresh just the bundle).
 
 ## Data notes that bite
 
@@ -151,6 +153,6 @@ Every meaningful prompt-and-response with an LLM (including conversations with C
 
 ## What "done" looks like for a task
 
-- **Pipeline change:** `Rscript run_all.R` runs clean from a fresh `data/processed/` directory.
-- **Shiny change:** app starts via `shiny::runApp('shiny')`, all six tabs render, no console warnings about reactive invalidation, the choropleth and flow heatmap are interactive.
+- **Pipeline change:** `Rscript run_all.R` runs clean from a fresh `data/processed/` directory and ends with `shiny/data/` repopulated.
+- **Shiny change:** app starts via `shiny::runApp('shiny')` with no `here::here()` calls inside `shiny/`, all seven tabs render, no console warnings about reactive invalidation, the choropleth and heatmap are interactive. Deploy verified via `Rscript deploy_app.R` — worker boots within shinyapps.io's 60-second window.
 - **Paper / slides change:** `deliverables/paper.pdf` and `deliverables/slides.pptx` are regenerated locally; every numerical claim in either matches a value in `outputs/tables/headline.csv` or `RESULTS.md`. Neither artefact is committed to the GitHub repo.
