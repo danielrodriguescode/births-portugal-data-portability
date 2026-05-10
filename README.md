@@ -12,13 +12,13 @@ PhD Laboratory Project in Health Data Science. Quantifies inter-regional obstetr
 
 - **R analytical pipeline** in `R/` (numbered `00_setup.R` → `04_visualise.R`).
 - **Interactive Shiny dashboard** in `shiny/`, deployable to shinyapps.io.
-- **LLM interaction log** in [prompts.md](prompts.md) — course requirement.
+- **LLM interaction log** in [prompts.md](prompts.md).
 - **Main results summary** in [RESULTS.md](RESULTS.md).
 - **Data dictionary** in [data/DATA_DICTIONARY.md](data/DATA_DICTIONARY.md).
 
 ## Reproducibility — full step-by-step
 
-The pipeline is deterministic from `data/raw/` onward: same raw inputs → same `.rds` panels → same headline numbers → same figures. The only manual step is exporting the PORDATA spreadsheet (no stable direct-download URL exists). End-to-end runtime on a recent laptop is ~2 minutes once the R packages are installed.
+The pipeline is deterministic from `data/raw/` onward: same raw inputs → same `.rds` panels → same headline numbers → same figures. The only manual step is exporting the PORDATA spreadsheet (no stable direct-download URL exists).
 
 ### 0. Prerequisites
 
