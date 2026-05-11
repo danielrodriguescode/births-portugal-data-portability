@@ -42,7 +42,7 @@ cd births-portugal-data-portability
 Rscript R/00_setup.R
 ```
 
-Installs every CRAN package the pipeline uses, plus `ulsportugal` from GitHub via `remotes::install_github("danielrodriguescode/ulsportugal")`. This step is idempotent — safe to re-run; it only installs what's missing.
+Installs every CRAN package the pipeline uses, plus `ulsportugal` from GitHub via `remotes::install_github("danielrodriguescode/ulsportugal")`.
 
 ### 3. Get the raw data
 
