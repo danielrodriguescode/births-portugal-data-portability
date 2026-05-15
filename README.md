@@ -18,7 +18,7 @@ PhD Laboratory Project in Health Data Science. Quantifies inter-regional obstetr
 
 ## Reproducibility — full step-by-step
 
-The pipeline is deterministic from `data/raw/` onward: same raw inputs → same `.rds` panels → same headline numbers → same figures. The only manual step is exporting the PORDATA spreadsheet (no stable direct-download URL exists).
+The source data is committed to the repository, so reproduction is clone → install → run with no manual data step. The pipeline is deterministic from `data/raw/` onward: the same raw inputs produce the same `.rds` panels, headline numbers, and figures.
 
 ### 0. Prerequisites
 
@@ -42,7 +42,7 @@ cd births-portugal-data-portability
 Rscript R/00_setup.R
 ```
 
-Installs the exact CRAN package set the pipeline and the Shiny app attach (including `lmerTest`, which `R/03_analyse.R` needs for the H3 Satterthwaite p-value, and `bsicons`, which `shiny/app.R` needs for the KPI icons), plus `ulsportugal` from GitHub via `remotes::install_github("danielrodriguescode/ulsportugal")`. **This step is mandatory** — `run_all.R` preflights against this list and stops with a clear message if anything is missing, rather than crashing mid-pipeline.
+Installs the CRAN packages the pipeline and Shiny app require, plus the `ulsportugal` package from GitHub. This step is mandatory; `run_all.R` preflights the dependency list and stops with an explicit message if any package is missing.
 
 ### 3. Get the raw data — already in the repo
 
@@ -54,16 +54,16 @@ Installs the exact CRAN package set the pipeline and the Shiny app attach (inclu
 | Live births by *município* of residence (annual) | [PORDATA](https://www.pordata.pt) | `data/raw/pordata.xlsx` |
 | 39 ULS sf polygons + concelho dictionary | [`ulsportugal`](https://github.com/danielrodriguescode/ulsportugal) | (R package, installed in step 2) |
 
-These are point-in-time snapshots taken 2026-05-10 (2014–2024 analysis window). Provenance, licensing, and attribution are documented in [data/raw/README.md](data/raw/README.md). They are committed deliberately: they pin the exact inputs every headline number comes from, and the repo keeps working even if an upstream URL rotates.
+These are point-in-time snapshots (2014–2024 analysis window). Provenance, licensing, and attribution are documented in [data/raw/README.md](data/raw/README.md).
 
 #### Refreshing to a newer data vintage (optional)
 
-You only need this to re-run against more recent data than the committed snapshot:
+Only needed to run against data more recent than the committed snapshot:
 
-- **SNS:** `FORCE_REDOWNLOAD=TRUE Rscript R/00_download.R` re-fetches the CSV.
-- **PORDATA:** PORDATA has no stable direct-download URL, so re-export by hand. Open <https://www.pordata.pt/>, find **"Nados-vivos de mães residentes em Portugal por Município"**, set território = *Municípios* and período covering at least 2010 → latest, use PORDATA's own **Descarregar → Excel (.xlsx)** button (do **not** copy-paste or re-save through another spreadsheet tool — that strips the metadata rows the parser needs), and overwrite `data/raw/pordata.xlsx` keeping all three sheets (`Quadro` / `Metainformação` / `Códigos`).
+- **SNS:** `FORCE_REDOWNLOAD=TRUE Rscript R/00_download.R`.
+- **PORDATA:** PORDATA exposes no stable direct-download URL. Re-export by hand from <https://www.pordata.pt/> (indicator *"Nados-vivos de mães residentes em Portugal por Município"*, território *Municípios*, período ≥ 2010), using PORDATA's own **Descarregar → Excel (.xlsx)** button — do not copy-paste or re-save through another spreadsheet tool, which strips the metadata rows the parser relies on. Overwrite `data/raw/pordata.xlsx`, keeping all three sheets (`Quadro` / `Metainformação` / `Códigos`).
 
-You do **not** have to get the export perfect by eye. `R/01_import.R` reads the `Quadro` sheet **by name** and asserts the structure `R/02_clean.R` depends on (year labels in row 6, cols 3–21). A mis-shaped export stops immediately with an actionable message (expected vs. got) — never silently-wrong numbers downstream. The committed snapshot parses as an ~388 × 256 sheet with year labels in row 6.
+`R/01_import.R` reads the `Quadro` sheet by name and validates the structure `R/02_clean.R` requires (year labels in row 6, columns 3–21); a malformed export is rejected at import with a message stating what was expected.
 
 ### 4. Run the full pipeline
 
@@ -75,7 +75,7 @@ This sources, in order:
 
 | # | Script | Reads from | Writes to |
 |---|---|---|---|
-| 1 | `R/00_download.R` | (network) | `data/raw/partos-e-cesarianas.csv` |
+| 1 | `R/00_download.R` | (network) | `data/raw/partos-e-cesarianas.csv` (skipped if already present) |
 | 2 | `R/01_import.R` | `data/raw/` | `data/processed/raw_partos.rds`, `raw_pordata.rds` |
 | 3 | `R/02_clean.R` | `data/processed/raw_*.rds` | `data/processed/{partos_uls, pordata_uls, hospitals, crosswalk_concelho_uls}.rds` |
 | 4 | `R/03_analyse.R` | `data/processed/*.rds` | `data/processed/{mobility_panel, models}.rds`, `outputs/tables/{headline, ppp_panel}.csv` |
@@ -95,7 +95,7 @@ Pipeline complete. Processed data in data/processed/, figures in outputs/figures
 cat outputs/tables/headline.csv
 ```
 
-Should print the headline metrics expected by [RESULTS.md](RESULTS.md): `n_uls = 39`, `h1_estimate ≈ −434`, `h1_p ≈ 0.001`, `h3_year_coef ≈ −7.5`, `h4_moran_I ≈ 0.115`. If any of these have moved by more than the third significant figure since the last commit, something upstream changed (e.g. PORDATA released a revision); update [RESULTS.md](RESULTS.md) to match.
+Against the committed snapshot this prints the values reported in [RESULTS.md](RESULTS.md): `n_uls = 39`, `h1_estimate ≈ −434`, `h1_p ≈ 0.001`, `h3_year_coef ≈ −7.5`, `h4_moran_I ≈ 0.115`.
 
 ### 6. Launch the Shiny app locally
 
@@ -103,7 +103,7 @@ Should print the headline metrics expected by [RESULTS.md](RESULTS.md): `n_uls =
 Rscript -e "shiny::runApp('shiny', launch.browser = TRUE)"
 ```
 
-Cold-start init takes ~1.5–2 seconds on a recent laptop (the `ulsportugal` polygons are pre-cached into `shiny/data/uls_map.rds` by `sync_shiny_data()`, so the app never downloads them at runtime). The app reads `shiny/data/` populated by `sync_shiny_data()` in step 4. If you only re-ran one pipeline stage and want to refresh the bundle without re-running the full pipeline:
+The app reads `shiny/data/`, populated by `sync_shiny_data()` in step 4 (the `ulsportugal` polygons are pre-cached into `shiny/data/uls_map.rds` so the app does no network access at startup). To rebuild the bundle without re-running the full pipeline:
 
 ```bash
 DRY_RUN=TRUE Rscript deploy_app.R
@@ -119,7 +119,7 @@ Rscript -e 'rsconnect::setAccountInfo(name="<account>", token="<token>", secret=
 Rscript deploy_app.R
 ```
 
-The Shiny app is **self-contained**: it reads only from `shiny/data/`, which is a derived copy of `data/processed/*.rds` plus `outputs/tables/headline.csv`. Do not commit `shiny/data/` — it is gitignored. Do not reintroduce `here::here()` inside `shiny/app.R` — shinyapps.io has no project-root marker and `here()` resolves unpredictably there, which is what produced the *"Unable to connect to worker after 60.00 seconds"* error before the self-containment fix.
+The Shiny app is self-contained: it reads only from `shiny/data/` (a derived copy of the pipeline outputs, gitignored and rebuilt by `sync_shiny_data()`) using paths relative to the app directory. It does not use `here::here()`, because shinyapps.io has no project-root marker for it to resolve against.
 
 ### Troubleshooting
 
@@ -130,8 +130,7 @@ The Shiny app is **self-contained**: it reads only from `shiny/data/`, which is 
 | `00_download.R` fails with HTTP 403/404 | Transparência SNS occasionally rotates the dataset slug. The current URL is hard-coded in `R/00_download.R` — update it from the [dataset page](https://transparencia.sns.gov.pt/explore/dataset/partos-e-cesarianas/) and re-run with `FORCE_REDOWNLOAD=TRUE`. |
 | `data/raw/pordata.xlsx does not match the expected PORDATA layout` (from `01_import.R`) | The manual export is the wrong shape. Re-export per README section 3 — use PORDATA's own Excel download, keep all three sheets (`Quadro`/`Metainformação`/`Códigos`), and do **not** re-save it through another spreadsheet tool. The error message prints what it expected vs. what it got. |
 | Joins drop Portuguese ULS / hospital names | Unicode NFC vs NFD mismatch — `02_clean.R` and `03_analyse.R` both run `stringi::stri_trans_nfc()` on join keys. If you add a new join, normalise both sides. |
-| Shiny app shows blank panels locally | `shiny/data/` is empty. Run `DRY_RUN=TRUE Rscript deploy_app.R` to rebuild it from the latest pipeline outputs. |
-| shinyapps.io worker times out at 60 s | Almost always a self-containment break — `shiny/app.R` has reintroduced `here::here()` or is reading something outside `shiny/`. The contract is documented at the top of `shiny/app.R`. |
+| Shiny app shows blank panels locally | `shiny/data/` is empty. Run `DRY_RUN=TRUE Rscript deploy_app.R` (or `run_all.R`) to rebuild it from the pipeline outputs. |
 
 ## Dashboard
 
@@ -163,7 +162,7 @@ See [data/DATA_DICTIONARY.md](data/DATA_DICTIONARY.md) for full variable descrip
 
 See [CLAUDE.md](CLAUDE.md) for the canonical layout, pipeline contract, and data-quirk notes (region crosswalk, hospital-name drift, monthly→annual aggregation, Unicode NFC/NFD).
 
-> **What is and isn't committed under `data/` and `outputs/`.** `data/raw/` **does** contain the two canonical source snapshots (`partos-e-cesarianas.csv`, `pordata.xlsx`) plus their provenance note — committed on purpose so the repo is clone-and-run reproducible (see [data/raw/README.md](data/raw/README.md)). `data/processed/`, `outputs/figures/`, `outputs/tables/`, and `shiny/data/` are intentionally gitignored because they are 100 % regenerable artefacts — `Rscript run_all.R` rebuilds every one of them from `data/raw/` in ~2 minutes. Each of those folders keeps a tracked `.gitkeep` so the structure survives a clone. Nothing analytical is hidden: the raw inputs, the code in `R/`, and the pinned headline values in [RESULTS.md](RESULTS.md) are all in the repo.
+`data/raw/` contains the two committed source snapshots and their provenance note ([data/raw/README.md](data/raw/README.md)). `data/processed/`, `outputs/figures/`, `outputs/tables/`, and `shiny/data/` are gitignored regenerable artefacts (rebuilt by `Rscript run_all.R`); each keeps a tracked `.gitkeep` so the directory structure survives a clone.
 
 ## Main results
 

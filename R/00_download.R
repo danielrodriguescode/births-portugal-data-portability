@@ -6,10 +6,9 @@
 #   Rscript R/00_download.R              # downloads only what's missing
 #   FORCE_REDOWNLOAD=TRUE Rscript R/00_download.R   # re-fetches everything
 #
-# Note: PORDATA and Transparência SNS do not currently expose stable, citable
-# direct-download URLs for these specific series. The URLs below were the
-# canonical landing pages at project start; if they redirect or 404, update
-# them here AND log the change in prompts.md per the course LLM-use protocol.
+# The Transparência SNS CSV is fetched from its open-data export URL. PORDATA
+# has no stable direct-download URL and is provisioned manually (README
+# section 3). If the SNS URL changes, update it below.
 
 library(here)
 

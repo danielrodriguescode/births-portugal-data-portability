@@ -5,8 +5,7 @@
 # Prerequisite: Rscript R/00_setup.R (one-off, installs all dependencies).
 
 # ---- Preflight: dependencies -------------------------------------------------
-# Fail with ONE actionable message if setup wasn't run, instead of a cryptic
-# "there is no package called 'here'" or a crash 3 scripts deep.
+# Stop with a single clear message if R/00_setup.R has not been run.
 .need <- c("here", "readr", "readxl", "dplyr", "tidyr", "stringi", "janitor",
            "lubridate", "sf", "spdep", "lme4", "lmerTest", "broom",
            "broom.mixed", "ulsportugal")

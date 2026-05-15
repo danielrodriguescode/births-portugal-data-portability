@@ -32,13 +32,9 @@ saveRDS(partos, file.path(out_dir, "raw_partos.rds"))
 
 # PORDATA xlsx has metadata rows and a multi-block header (Total / Masculino /
 # Feminino, see CLAUDE.md). Read raw without column-name parsing so 02_clean.R
-# can slice the right block.
-#
-# The manual PORDATA export is the one non-deterministic input to this
-# pipeline. To make a failed or mis-shaped export fail LOUDLY and EARLY
-# (instead of producing silently-wrong numbers ~200 lines downstream), we
-# (a) read the data sheet by NAME ("Quadro") not by position, and (b) assert
-# the structure 02_clean.R depends on: year labels in row 6, columns 3-21.
+# can slice the right block. The data sheet is read by name ("Quadro") and its
+# structure validated here, so a malformed manual export is rejected at import
+# rather than corrupting downstream results.
 pordata_path <- file.path(raw_dir, "pordata.xlsx")
 if (!file.exists(pordata_path)) {
   stop(
