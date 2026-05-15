@@ -10,7 +10,7 @@ This is **not a generic software project**. It is a research codebase for a PhD 
 
 **What lives in this repository:**
 1. **R analytical pipeline** producing the ULS-level Mobility metric (see Methodology below).
-2. **Shiny application** deployable to shinyapps.io with seven tabs: Answer (headline + 4-test table), Map (ULS choropleth via `ulsportugal`), ULS Explorer (deliveries-vs-residents scatter), Heatmap (mobility ULS × year), PPP hospitals (separate panel for the four PPPs excluded from H1–H4), Methods (plain language), Data (source attribution & links).
+2. **Shiny application** deployable to shinyapps.io with five tabs: **Overview** (lede + KPI value boxes + year-filterable ULS choropleth via `ulsportugal` + top-7 importer/exporter ranks), **By ULS** (deliveries-vs-residents scatter + per-ULS table with mobility ratio), **Over time** (national lmer trend + ULS × year heatmap), **Hypotheses** (sub-tabs H1–H4, each with question, test rationale, verdict pill, plot, and interpretation), **Sources** (open-data attribution + the four PPP hospitals folded in).
 3. **README, [prompts.md](prompts.md) (LLM interactions, mandated by the course), data dictionary, and reproducibility notes.**
 
 The assignment grading is: research question 10% / data acquisition & processing 20% / statistical analysis 25% / dashboard 20% / GitHub & reproducibility 15% / oral defense 10%. Optimise for **statistical depth and reproducibility**, not feature breadth.
@@ -46,7 +46,7 @@ R only. Do not introduce Python — the assignment allows it but the project pla
 │   ├── region_crosswalk.R  # NUTS 2024 ↔ Região de Saúde mapping + URBAN_TERTIARY_ULS
 │   └── sync_shiny_data.R   # Copy data/processed/ + headline.csv → shiny/data/
 ├── shiny/
-│   ├── app.R                # Single-file Shiny entry point (seven tabs)
+│   ├── app.R                # Single-file Shiny entry point (five tabs)
 │   └── data/                # Bundle (gitignored) — refilled by sync_shiny_data
 ├── deploy_app.R             # Sync + rsconnect::deployApp("shiny")
 ├── outputs/
@@ -109,7 +109,7 @@ The pipeline is **strictly sequential and idempotent**. Each numbered script in 
    `Mobility = HospitalDeliveries(uls, year) − ResidentBirths(uls, year)`
    No capacity proxy, no redistribution. PORDATA is aggregated to ULS via the concelho→ULS dictionary in `ulsportugal` (3 split concelhos — Lisboa, Loures, Porto — allocated proportionally to freguesia counts). Apply Unicode NFC normalisation (`stringi::stri_trans_nfc`) on every join key — without it the SNS data (composed `ã`) silently fails to match the crosswalk source-file (decomposed). Run H1 (one-sample t-test on per-ULS means, n=39 — no IID violation), H2 (Wilcoxon urban tertiary vs other), H3 (lmer with `lmerTest`-derived Satterthwaite p-values), H4 (Moran's I, k=5 NN on ULS polygon centroids). Output `mobility_panel.rds`, `models.rds`, `outputs/tables/headline.csv`, `outputs/tables/ppp_panel.csv`.
 5. **`04_visualise.R`** — generate every static figure into `outputs/figures/` for use by the dashboard. Currently 9 figures (`fig01_deliveries_top10_uls`, `fig02_caesarean_rate_national`, `fig03_mobility_by_uls`, `fig04_deliveries_vs_residents`, `fig05_mobility_heatmap`, `fig06_mobility_choropleth`, `fig07a_lmer_resid_vs_fitted`, `fig07b_lmer_qq`, `fig08_h2_urban_vs_peripheral`).
-6. **`R/sync_shiny_data.R`** — copies the five required `.rds` panels and `outputs/tables/headline.csv` into `shiny/data/`. Sourced by `run_all.R` at the very end so a fresh pipeline run leaves the Shiny bundle ready for both local launch and `deploy_app.R`.
+6. **`R/sync_shiny_data.R`** — copies the five required `.rds` panels (`partos_uls`, `pordata_uls`, `mobility_panel`, `hospitals`, `models`) plus `outputs/tables/headline.csv` into `shiny/data/`, and additionally caches the `ulsportugal` sf polygons as `shiny/data/uls_map.rds` (xz-compressed, ~67 KB) so the deployed app never calls `ulsportugal()` at runtime — that download is ~60 MB on every shinyapps.io cold start. Seven files total. Sourced by `run_all.R` at the very end so a fresh pipeline run leaves the Shiny bundle ready for both local launch and `deploy_app.R`.
 
 The Shiny app reads ONLY from `shiny/data/` — it does not re-run the pipeline and does not reach back into `data/processed/`. If app data looks stale, run `run_all.R` (or `DRY_RUN=TRUE Rscript deploy_app.R` to refresh just the bundle).
 
@@ -140,4 +140,4 @@ Every meaningful prompt-and-response with an LLM (including conversations with C
 ## What "done" looks like for a task
 
 - **Pipeline change:** `Rscript run_all.R` runs clean from a fresh `data/processed/` directory and ends with `shiny/data/` repopulated.
-- **Shiny change:** app starts via `shiny::runApp('shiny')` with no `here::here()` calls inside `shiny/`, all seven tabs render, no console warnings about reactive invalidation, the choropleth and heatmap are interactive. Deploy verified via `Rscript deploy_app.R` — worker boots within shinyapps.io's 60-second window.
+- **Shiny change:** app starts via `shiny::runApp('shiny')` with no `here::here()` calls inside `shiny/`, all five tabs render (Overview / By ULS / Over time / Hypotheses / Sources), no console warnings about reactive invalidation, the choropleth and heatmap are interactive, and the H1–H4 sub-tabs each render their plot. Deploy verified via `Rscript deploy_app.R` — worker boots within shinyapps.io's 60-second window.

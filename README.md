@@ -76,12 +76,12 @@ This sources, in order:
 | 3 | `R/02_clean.R` | `data/processed/raw_*.rds` | `data/processed/{partos_uls, pordata_uls, hospitals, crosswalk_concelho_uls}.rds` |
 | 4 | `R/03_analyse.R` | `data/processed/*.rds` | `data/processed/{mobility_panel, models}.rds`, `outputs/tables/{headline, ppp_panel}.csv` |
 | 5 | `R/04_visualise.R` | `data/processed/`, `outputs/tables/` | `outputs/figures/fig01–fig08*.png` (9 figures) |
-| 6 | `R/sync_shiny_data.R` | `data/processed/`, `outputs/tables/headline.csv` | `shiny/data/` (5 `.rds` + `headline.csv`) |
+| 6 | `R/sync_shiny_data.R` | `data/processed/`, `outputs/tables/headline.csv`, `ulsportugal` | `shiny/data/` (5 panel `.rds` + `headline.csv` + cached `uls_map.rds`) |
 
 Expected output on success ends with:
 
 ```
-Synced 6 files into shiny/data/: headline.csv, hospitals.rds, mobility_panel.rds, models.rds, partos_uls.rds, pordata_uls.rds
+Synced 7 files into shiny/data/: headline.csv, hospitals.rds, mobility_panel.rds, models.rds, partos_uls.rds, pordata_uls.rds, uls_map.rds
 Pipeline complete. Processed data in data/processed/, figures in outputs/figures/, Shiny bundle in shiny/data/.
 ```
 
@@ -99,7 +99,7 @@ Should print the headline metrics expected by [RESULTS.md](RESULTS.md): `n_uls =
 Rscript -e "shiny::runApp('shiny', launch.browser = TRUE)"
 ```
 
-Cold-start init takes ~5–7 seconds on a recent laptop. The app reads `shiny/data/` populated by `sync_shiny_data()` in step 4. If you only re-ran one pipeline stage and want to refresh the bundle without re-running the full pipeline:
+Cold-start init takes ~1.5–2 seconds on a recent laptop (the `ulsportugal` polygons are pre-cached into `shiny/data/uls_map.rds` by `sync_shiny_data()`, so the app never downloads them at runtime). The app reads `shiny/data/` populated by `sync_shiny_data()` in step 4. If you only re-ran one pipeline stage and want to refresh the bundle without re-running the full pipeline:
 
 ```bash
 DRY_RUN=TRUE Rscript deploy_app.R
@@ -128,6 +128,22 @@ The Shiny app is **self-contained**: it reads only from `shiny/data/`, which is 
 | Shiny app shows blank panels locally | `shiny/data/` is empty. Run `DRY_RUN=TRUE Rscript deploy_app.R` to rebuild it from the latest pipeline outputs. |
 | shinyapps.io worker times out at 60 s | Almost always a self-containment break — `shiny/app.R` has reintroduced `here::here()` or is reading something outside `shiny/`. The contract is documented at the top of `shiny/app.R`. |
 
+## Dashboard
+
+Live: **https://danielrodrigues.shinyapps.io/births-portugal/**
+
+Five tabs:
+
+| Tab | What it shows |
+|---|---|
+| **Overview** | One-paragraph answer to the research question, an inline *what-is-mobility* explainer, a year slider (2014–2024, default 2024, animatable), four KPI value boxes, a year-filterable ULS choropleth, and the top-7 net importers / exporters. |
+| **By ULS** | Deliveries-vs-residents scatter for the selected year, and a sortable per-ULS table with a mobility-ratio column (+87 % / −55 % framing). |
+| **Over time** | National mean-mobility trend with the `lmer` slope, and a ULS × year mobility heatmap. |
+| **Hypotheses** | Sub-tabs for H1–H4. Each is a full page: the question, the statistical test and why it was chosen, a verdict pill (reject H₀ / n.s.), a 480 px plot, and 2–3 paragraphs of interpretation. |
+| **Sources** | Open-data attribution with links, plus the four PPP hospitals (excluded from H1–H4) reported separately. |
+
+The app is self-contained and reads only from `shiny/data/` — see the deployment notes in step 7.
+
 ## Data sources
 
 See [data/DATA_DICTIONARY.md](data/DATA_DICTIONARY.md) for full variable descriptions, time periods, and study populations.
@@ -141,6 +157,8 @@ See [data/DATA_DICTIONARY.md](data/DATA_DICTIONARY.md) for full variable descrip
 ## Repository layout
 
 See [CLAUDE.md](CLAUDE.md) for the canonical layout, pipeline contract, and data-quirk notes (region crosswalk, hospital-name drift, monthly→annual aggregation, Unicode NFC/NFD).
+
+> **Why `data/` and `outputs/` look empty on a fresh clone.** This is intentional. `data/raw/` is gitignored because the PORDATA and Transparência SNS source files carry upstream licensing terms that should not be redistributed. `data/processed/`, `outputs/figures/`, `outputs/tables/`, and `shiny/data/` are gitignored because they are 100 % regenerable artefacts — `Rscript run_all.R` rebuilds every one of them from `data/raw/` in ~2 minutes. Each folder keeps a tracked `.gitkeep` so the structure is preserved. Nothing analytical is hidden: the code that produces every number is in `R/`, and the headline values are pinned in [RESULTS.md](RESULTS.md).
 
 ## Main results
 
