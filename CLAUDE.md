@@ -34,7 +34,7 @@ R only. Do not introduce Python — the assignment allows it but the project pla
 ```
 .
 ├── data/
-│   ├── raw/         # Untouched source files (gitignored, fetched by R/00_download.R)
+│   ├── raw/         # Source snapshots COMMITTED (partos csv + pordata xlsx + README provenance); other drops gitignored
 │   └── processed/   # .rds artefacts produced by the pipeline (gitignored)
 ├── R/
 │   ├── 00_setup.R          # Install all packages incl. ulsportugal from GitHub

@@ -44,24 +44,26 @@ Rscript R/00_setup.R
 
 Installs the exact CRAN package set the pipeline and the Shiny app attach (including `lmerTest`, which `R/03_analyse.R` needs for the H3 Satterthwaite p-value, and `bsicons`, which `shiny/app.R` needs for the KPI icons), plus `ulsportugal` from GitHub via `remotes::install_github("danielrodriguescode/ulsportugal")`. **This step is mandatory** — `run_all.R` preflights against this list and stops with a clear message if anything is missing, rather than crashing mid-pipeline.
 
-### 3. Get the raw data
+### 3. Get the raw data — already in the repo
 
-| Dataset | Source | File | How |
-|---|---|---|---|
-| SNS hospital deliveries (monthly cumulative-YTD) | [Transparência SNS](https://transparencia.sns.gov.pt/explore/dataset/partos-e-cesarianas/) | `data/raw/partos-e-cesarianas.csv` | **Auto-fetched** by `R/00_download.R`. To force a re-download set `FORCE_REDOWNLOAD=TRUE`. |
-| Live births by *município* of residence (annual) | [PORDATA](https://www.pordata.pt) | `data/raw/pordata.xlsx` | **Manual export.** PORDATA does not expose a stable direct-download URL — the table has to be exported once by hand. See instructions below. |
-| 39 ULS sf polygons + concelho dictionary | [`ulsportugal`](https://github.com/danielrodriguescode/ulsportugal) | (R package) | Installed in step 2. |
+**Nothing to do.** Both source snapshots are committed under `data/raw/` so the repo is clone-and-run reproducible:
 
-#### How to export `pordata.xlsx` manually
+| Dataset | Source | File (committed) |
+|---|---|---|
+| SNS hospital deliveries (monthly cumulative-YTD) | [Transparência SNS](https://transparencia.sns.gov.pt/explore/dataset/partos-e-cesarianas/) | `data/raw/partos-e-cesarianas.csv` |
+| Live births by *município* of residence (annual) | [PORDATA](https://www.pordata.pt) | `data/raw/pordata.xlsx` |
+| 39 ULS sf polygons + concelho dictionary | [`ulsportugal`](https://github.com/danielrodriguescode/ulsportugal) | (R package, installed in step 2) |
 
-This is the **only non-deterministic step** in the whole pipeline, so it is worth doing carefully. The cleaning code reads the `Quadro` sheet positionally (calendar-year labels in row 6, columns 3–21 — the *Total* block), so the export must keep PORDATA's native workbook structure.
+These are point-in-time snapshots taken 2026-05-10 (2014–2024 analysis window). Provenance, licensing, and attribution are documented in [data/raw/README.md](data/raw/README.md). They are committed deliberately: they pin the exact inputs every headline number comes from, and the repo keeps working even if an upstream URL rotates.
 
-1. Open <https://www.pordata.pt/> and find the indicator **"Nados-vivos de mães residentes em Portugal por Município"** (English: *"Live births by mother's municipality of residence"*). It is the município-level live-births table; the workbook has three sheets: `Quadro`, `Metainformação`, `Códigos`.
-2. Set the **território** to *Municípios* and the **período** to cover at least **2010 → the latest available year** (the active analysis window 2014–2024 must fall inside the exported range).
-3. Use PORDATA's own **Descarregar / Download → Excel (.xlsx)** button. Do **not** copy-paste into a new spreadsheet, and do **not** open-and-re-save through Numbers/LibreOffice/Excel — that strips the metadata rows the parser depends on.
-4. Save the file as exactly `data/raw/pordata.xlsx` (keep all three sheets).
+#### Refreshing to a newer data vintage (optional)
 
-You do **not** have to get this perfect by eye. `R/01_import.R` reads the `Quadro` sheet **by name** and then asserts the structure `R/02_clean.R` depends on (year labels in row 6, cols 3–21). If the export is the wrong shape it stops immediately with an actionable message telling you exactly what it expected versus what it got — so a bad export fails loudly at import, never as silently-wrong numbers downstream. A correct export currently parses as an ~388 × 256 sheet with year labels detected in row 6.
+You only need this to re-run against more recent data than the committed snapshot:
+
+- **SNS:** `FORCE_REDOWNLOAD=TRUE Rscript R/00_download.R` re-fetches the CSV.
+- **PORDATA:** PORDATA has no stable direct-download URL, so re-export by hand. Open <https://www.pordata.pt/>, find **"Nados-vivos de mães residentes em Portugal por Município"**, set território = *Municípios* and período covering at least 2010 → latest, use PORDATA's own **Descarregar → Excel (.xlsx)** button (do **not** copy-paste or re-save through another spreadsheet tool — that strips the metadata rows the parser needs), and overwrite `data/raw/pordata.xlsx` keeping all three sheets (`Quadro` / `Metainformação` / `Códigos`).
+
+You do **not** have to get the export perfect by eye. `R/01_import.R` reads the `Quadro` sheet **by name** and asserts the structure `R/02_clean.R` depends on (year labels in row 6, cols 3–21). A mis-shaped export stops immediately with an actionable message (expected vs. got) — never silently-wrong numbers downstream. The committed snapshot parses as an ~388 × 256 sheet with year labels in row 6.
 
 ### 4. Run the full pipeline
 
@@ -161,7 +163,7 @@ See [data/DATA_DICTIONARY.md](data/DATA_DICTIONARY.md) for full variable descrip
 
 See [CLAUDE.md](CLAUDE.md) for the canonical layout, pipeline contract, and data-quirk notes (region crosswalk, hospital-name drift, monthly→annual aggregation, Unicode NFC/NFD).
 
-> **Why `data/` and `outputs/` look empty on a fresh clone.** This is intentional. `data/raw/` is gitignored because the PORDATA and Transparência SNS source files carry upstream licensing terms that should not be redistributed. `data/processed/`, `outputs/figures/`, `outputs/tables/`, and `shiny/data/` are gitignored because they are 100 % regenerable artefacts — `Rscript run_all.R` rebuilds every one of them from `data/raw/` in ~2 minutes. Each folder keeps a tracked `.gitkeep` so the structure is preserved. Nothing analytical is hidden: the code that produces every number is in `R/`, and the headline values are pinned in [RESULTS.md](RESULTS.md).
+> **What is and isn't committed under `data/` and `outputs/`.** `data/raw/` **does** contain the two canonical source snapshots (`partos-e-cesarianas.csv`, `pordata.xlsx`) plus their provenance note — committed on purpose so the repo is clone-and-run reproducible (see [data/raw/README.md](data/raw/README.md)). `data/processed/`, `outputs/figures/`, `outputs/tables/`, and `shiny/data/` are intentionally gitignored because they are 100 % regenerable artefacts — `Rscript run_all.R` rebuilds every one of them from `data/raw/` in ~2 minutes. Each of those folders keeps a tracked `.gitkeep` so the structure survives a clone. Nothing analytical is hidden: the raw inputs, the code in `R/`, and the pinned headline values in [RESULTS.md](RESULTS.md) are all in the repo.
 
 ## Main results
 

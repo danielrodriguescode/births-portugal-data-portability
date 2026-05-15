@@ -19,5 +19,12 @@
 *.rds       binary
 *.RData     binary
 
+# Committed raw-data snapshots: preserve byte-for-byte (the SNS CSV is UTF-8
+# WITH BOM and 02_clean.R depends on exact bytes). Override the generic
+# *.csv text rule above so git never normalises line endings here. Mark as
+# linguist-vendored so they don't skew the repo's language stats.
+data/raw/partos-e-cesarianas.csv  -text binary linguist-vendored
+data/raw/pordata.xlsx             binary linguist-vendored
+
 # Stop GitHub linguist from claiming this is a JS project, etc.
 *.js linguist-vendored

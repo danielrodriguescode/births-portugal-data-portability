@@ -5,10 +5,15 @@
 .Ruserdata
 *.Rproj
 
-# Raw data — fetched at runtime by R/00_download.R; PORDATA exported manually.
-# Not committed to keep the public repo free of upstream data licences.
+# Raw data. The two canonical source snapshots ARE committed (small, public,
+# academic-reuse-with-attribution — see data/raw/README.md) so the repo is
+# clone-and-run reproducible and survives upstream URL changes. Anything else
+# dropped into data/raw/ stays ignored.
 data/raw/*
 !data/raw/.gitkeep
+!data/raw/partos-e-cesarianas.csv
+!data/raw/pordata.xlsx
+!data/raw/README.md
 
 # Pipeline artefacts (rebuildable from data/raw via run_all.R)
 data/processed/*
