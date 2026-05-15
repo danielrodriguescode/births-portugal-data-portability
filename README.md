@@ -42,7 +42,7 @@ cd births-portugal-data-portability
 Rscript R/00_setup.R
 ```
 
-Installs every CRAN package the pipeline uses, plus `ulsportugal` from GitHub via `remotes::install_github("danielrodriguescode/ulsportugal")`.
+Installs the exact CRAN package set the pipeline and the Shiny app attach (including `lmerTest`, which `R/03_analyse.R` needs for the H3 Satterthwaite p-value, and `bsicons`, which `shiny/app.R` needs for the KPI icons), plus `ulsportugal` from GitHub via `remotes::install_github("danielrodriguescode/ulsportugal")`. **This step is mandatory** — `run_all.R` preflights against this list and stops with a clear message if anything is missing, rather than crashing mid-pipeline.
 
 ### 3. Get the raw data
 
@@ -54,12 +54,14 @@ Installs every CRAN package the pipeline uses, plus `ulsportugal` from GitHub vi
 
 #### How to export `pordata.xlsx` manually
 
-1. Open <https://www.pordata.pt/> and search for **"Nados-vivos por município de residência da mãe"** (or the English equivalent: *"Live births by mother's municipality of residence"*).
-2. Pick the table indexed by **Município**, **Sexo** (Total/Masculino/Feminino), **Ano** — there is one canonical PORDATA table for this.
-3. Set the time range to cover at least **2010–latest year available** (the cleaning code expects the active analysis window of 2014–2024 to fall inside whatever is exported).
-4. Click **Exportar → Excel (XLSX)**. Save the file as exactly `data/raw/pordata.xlsx`.
+This is the **only non-deterministic step** in the whole pipeline, so it is worth doing carefully. The cleaning code reads the `Quadro` sheet positionally (calendar-year labels in row 6, columns 3–21 — the *Total* block), so the export must keep PORDATA's native workbook structure.
 
-The file's sheet must be called `Quadro` and follow PORDATA's standard layout: 5 metadata rows, then a year-label row at row 6, then *Município*-keyed data rows. `R/02_clean.R` slices the *Total* block manually; do not pre-process the file.
+1. Open <https://www.pordata.pt/> and find the indicator **"Nados-vivos de mães residentes em Portugal por Município"** (English: *"Live births by mother's municipality of residence"*). It is the município-level live-births table; the workbook has three sheets: `Quadro`, `Metainformação`, `Códigos`.
+2. Set the **território** to *Municípios* and the **período** to cover at least **2010 → the latest available year** (the active analysis window 2014–2024 must fall inside the exported range).
+3. Use PORDATA's own **Descarregar / Download → Excel (.xlsx)** button. Do **not** copy-paste into a new spreadsheet, and do **not** open-and-re-save through Numbers/LibreOffice/Excel — that strips the metadata rows the parser depends on.
+4. Save the file as exactly `data/raw/pordata.xlsx` (keep all three sheets).
+
+You do **not** have to get this perfect by eye. `R/01_import.R` reads the `Quadro` sheet **by name** and then asserts the structure `R/02_clean.R` depends on (year labels in row 6, cols 3–21). If the export is the wrong shape it stops immediately with an actionable message telling you exactly what it expected versus what it got — so a bad export fails loudly at import, never as silently-wrong numbers downstream. A correct export currently parses as an ~388 × 256 sheet with year labels detected in row 6.
 
 ### 4. Run the full pipeline
 
@@ -121,9 +123,10 @@ The Shiny app is **self-contained**: it reads only from `shiny/data/`, which is 
 
 | Symptom | Cause / fix |
 |---|---|
+| `Missing R packages: …` from `run_all.R` | You skipped step 2. Run `Rscript R/00_setup.R` (it installs everything, including `lmerTest` and `bsicons`), then re-run. |
 | `Error: package 'sf' could not be loaded` | Install GDAL/PROJ/UDUNITS system libraries first (see Prerequisites), then `Rscript R/00_setup.R` again. |
 | `00_download.R` fails with HTTP 403/404 | Transparência SNS occasionally rotates the dataset slug. The current URL is hard-coded in `R/00_download.R` — update it from the [dataset page](https://transparencia.sns.gov.pt/explore/dataset/partos-e-cesarianas/) and re-run with `FORCE_REDOWNLOAD=TRUE`. |
-| `02_clean.R` reports 0 PORDATA rows | The exported `pordata.xlsx` is in the wrong layout. Re-export with sheet `Quadro` and 5 metadata rows preserved (do **not** pre-clean it). |
+| `data/raw/pordata.xlsx does not match the expected PORDATA layout` (from `01_import.R`) | The manual export is the wrong shape. Re-export per README section 3 — use PORDATA's own Excel download, keep all three sheets (`Quadro`/`Metainformação`/`Códigos`), and do **not** re-save it through another spreadsheet tool. The error message prints what it expected vs. what it got. |
 | Joins drop Portuguese ULS / hospital names | Unicode NFC vs NFD mismatch — `02_clean.R` and `03_analyse.R` both run `stringi::stri_trans_nfc()` on join keys. If you add a new join, normalise both sides. |
 | Shiny app shows blank panels locally | `shiny/data/` is empty. Run `DRY_RUN=TRUE Rscript deploy_app.R` to rebuild it from the latest pipeline outputs. |
 | shinyapps.io worker times out at 60 s | Almost always a self-containment break — `shiny/app.R` has reintroduced `here::here()` or is reading something outside `shiny/`. The contract is documented at the top of `shiny/app.R`. |

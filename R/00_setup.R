@@ -2,22 +2,28 @@
 # Install and load every package the project depends on. Run once after cloning.
 # Usage: Rscript R/00_setup.R
 
+# This list is the exact set of packages the pipeline (R/00–04 + sync) and the
+# Shiny app attach. Kept deliberately tight: every entry is verified to be
+# loaded somewhere in the codebase, and nothing left over from the removed
+# paper/presentation tooling is installed. If you add a library() call
+# anywhere, add the package here too.
 required <- c(
-  # data wrangling
+  # data wrangling — tidyverse pulls dplyr/tidyr/ggplot2/readr/stringr/
+  #                   forcats/lubridate/tibble, all attached across the code
   "tidyverse", "janitor", "lubridate", "here", "stringr", "stringi",
   # I/O
-  "readr", "readxl", "openxlsx",
+  "readr", "readxl",
   # spatial
-  "sf", "leaflet", "tmap",
-  # modelling
-  "lme4", "spdep", "broom", "broom.mixed",
-  # reporting
-  "knitr", "rmarkdown", "quarto",
-  # app
-  "shiny", "bslib", "shinydashboard", "plotly", "DT",
+  "sf", "leaflet",
+  # modelling — lmerTest is REQUIRED by R/03_analyse.R for the Satterthwaite
+  #             p-value on the H3 year coefficient (was missing → 03 crashed)
+  "lme4", "lmerTest", "spdep", "broom", "broom.mixed",
+  # Shiny app — bsicons is REQUIRED by shiny/app.R for the KPI value-box icons
+  #             (was missing → the app crashed on startup)
+  "shiny", "bslib", "bsicons", "plotly", "DT", "scales", "htmltools",
   # deploy
   "rsconnect",
-  # github-only deps
+  # github-only deps installer
   "remotes"
 )
 
