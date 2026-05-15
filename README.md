@@ -29,12 +29,20 @@ The source data is committed to the repository, so reproduction is clone → ins
 | **Internet access** | The SNS CSV is auto-fetched, and `ulsportugal` is installed from GitHub. |
 | **Optional — shinyapps.io account** | Only needed for online deployment. Local Shiny launches do not need it. |
 
-### 1. Clone the repo
+### 1. Get the repo
+
+Clone it:
 
 ```bash
 git clone https://github.com/danielrodriguescode/births-portugal-data-portability.git
 cd births-portugal-data-portability
 ```
+
+…or download the ZIP from GitHub and extract it — both work. The repo
+includes a `.here` anchor file, so `here::here()` resolves the project
+root correctly whether you clone or unzip, and regardless of which
+sub-folder your R session starts in. Run the commands below from the
+repository root.
 
 ### 2. Install R dependencies (one-off)
 
