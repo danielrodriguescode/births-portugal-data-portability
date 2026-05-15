@@ -22,6 +22,14 @@
 
 ## Entries
 
+### 2026-04-29 — Project Plan
+
+**Critical comment:**
+
+> The project plan was discussed between the team members and drafted without the help of an LLM, namely the issue of data portability, possible databases used, aswell as hypothesis for testing. That plan was then introduced in Claude to draft a more detailed research plan and to help develop the app.
+
+---
+
 ### 2026-05-05 — Initial project scaffold and CLAUDE.md
 
 **Prompt:** Write a research-context CLAUDE.md and plan the R project codebase per `PhD_Project_Plan_Births_Portugal.docx`, culminating in a Shiny app.
